@@ -17,6 +17,8 @@ jobs:
           usermod -a -G mock mockbuilder
           dnf download --source zstd
 
+          chown -R mockbuilder:mock .
+
           sudo -u mockbuilder mock -r fedora-43-x86_64 \
             --define "optflags -O3 -march=x86-64-v4" \
             --rebuild zstd-*.src.rpm \
