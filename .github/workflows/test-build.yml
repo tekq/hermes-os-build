@@ -19,14 +19,14 @@ jobs:
 
           chown -R mockbuilder:mock .
 
-          sudo -u mockbuilder mock -r fedora-43-x86_64 \
-            --define "optflags -O3 -march=x86-64-v4 -mtune=generic" \
-            --define "_smp_mflags -j2" \
+          mock -r fedora-43-x86_64 \
             --plugin-option=root_cache:enabled=True \
-            --setenv=CFLAGS="-O3 -march=x86-64-v4" \
-            --setenv=CXXFLAGS="-O3 -march=x86-64-v4" \
-            --rebuild zstd-*.src.rpm \
-            --resultdir=./output
+            --define 'optflags -O3 -march=x86-64-v4 -mtune=generic' \
+            --define '_smp_mflags -j2' \
+            --setenv="CFLAGS=-O3 -march=x86-64-v4" \
+            --setenv="CXXFLAGS=-O3 -march=x86-64-v4" \
+            --resultdir=./output \
+            --rebuild zstd-*.src.rpm
 
       - name: Check Log for v4
         run: |
