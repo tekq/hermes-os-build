@@ -1,0 +1,27 @@
+name: Test v4 Build
+on: [workflow_dispatch]
+
+jobs:
+  test-v4:
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:43
+      options: --privileged
+    steps:
+      - name: Install Mock
+        run: dnf install -y mock fedora-packager
+
+      - name: Build Zstd
+        run: |
+          useradd mockbuilder
+          usermod -a -G mock mockbuilder
+          dnf download --source zstd
+
+          sudo -u mockbuilder mock -r fedora-43-x86_64 \
+            --define "optflags -O3 -march=x86-64-v4" \
+            --rebuild zstd-*.src.rpm \
+            --resultdir=./output
+
+      - name: Check Log for v4
+        run: |
+          grep "\-march=x86-64-v4" ./output/build.log && echo "PASS" || echo "FAIL"
