@@ -1,33 +1,62 @@
-name: Test v4 Build
-on: [workflow_dispatch]
+name: Scheduled v4 Optimization
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  test-v4:
+  check-and-build:
     runs-on: ubuntu-latest
     container:
       image: fedora:43
-      options: --privileged
+
     steps:
-      - name: Install Mock
-        run: dnf install -y mock fedora-packager
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Build Zstd
+      - name: Install System Tools
+        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make createrepo_c git python3
+
+      - name: Run Hit List Check
+        id: scanner
         run: |
-          useradd mockbuilder
-          usermod -a -G mock mockbuilder
-          dnf download --source zstd
+          UPDATES=$(python3 check_updates.py | grep "Triggering build for:" | sed 's/Triggering build for: //')
+          echo "packages=$UPDATES" >> $GITHUB_OUTPUT
 
-          chown -R mockbuilder:mock .
-
-          mock -r fedora-43-x86_64 \
-            --plugin-option=root_cache:enabled=True \
-            --define 'optflags -O3 -march=x86-64-v4 -mtune=generic' \
-            --define '_smp_mflags -j2' \
-            --setenv="CFLAGS=-O3 -march=x86-64-v4" \
-            --setenv="CXXFLAGS=-O3 -march=x86-64-v4" \
-            --resultdir=./output \
-            --rebuild zstd-*.src.rpm
-
-      - name: Check Log for v4
+      - name: Build Outdated Packages
+        if: steps.scanner.outputs.packages != ''
+        env:
+          CFLAGS: "-O3 -march=x86-64-v4 -mtune=generic"
+          CXXFLAGS: "-O3 -march=x86-64-v4 -mtune=generic"
         run: |
-          grep "\-march=x86-64-v4" ./output/build.log && echo "PASS" || echo "FAIL"
+          PKGS=$(echo "${{ steps.scanner.outputs.packages }}" | tr -d "[]'," )
+
+          for pkg in $PKGS; do
+            echo "--- Processing $pkg ---"
+            dnf download --source $pkg
+            dnf builddep -y $pkg-*.src.rpm
+
+            mkdir -p bin_output
+            rpmbuild --rebuild $pkg-*.src.rpm \
+              --define "_rpmdir $(pwd)/bin_output" \
+              --define "optflags $CFLAGS" \
+              --define "_optimization_level 3"
+
+            cp bin_output/x86_64/*.rpm ./x86_64/
+            rm -rf bin_output/* $pkg-*.src.rpm
+          done
+
+      - name: Deploy to GitHub Pages
+        if: steps.scanner.outputs.packages != ''
+        run: |
+          git config --global --add safe.directory $(pwd)
+          git config --global user.name "stella-build-bot"
+          git config --global user.email "stella@dev.local"
+
+          createrepo_c ./x86_64/
+          git add x86_64/
+          git commit -m "Automated v4 update: ${{ steps.scanner.outputs.packages }}"
+          git push

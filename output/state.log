@@ -1,0 +1,30 @@
+2026-02-07 00:36:43,475 - Mock Version: 6.6
+2026-02-07 00:36:43,483 - Start(bootstrap): chroot init
+2026-02-07 00:36:43,520 - Start(bootstrap): cleaning package manager metadata
+2026-02-07 00:36:43,520 - Finish(bootstrap): cleaning package manager metadata
+2026-02-07 00:37:01,573 - Start: clean chroot
+2026-02-07 00:37:01,597 - Finish: clean chroot
+2026-02-07 00:37:16,694 - Mock Version: 6.6
+2026-02-07 00:37:16,702 - Start(bootstrap): chroot init
+2026-02-07 00:37:16,738 - Start(bootstrap): cleaning package manager metadata
+2026-02-07 00:37:16,738 - Finish(bootstrap): cleaning package manager metadata
+2026-02-07 00:37:17,380 - Finish(bootstrap): chroot init
+2026-02-07 00:37:17,383 - Start: chroot init
+2026-02-07 00:37:17,397 - Start: unpacking root cache
+2026-02-07 00:37:17,962 - Finish: unpacking root cache
+2026-02-07 00:37:17,965 - Start: cleaning package manager metadata
+2026-02-07 00:37:17,966 - Finish: cleaning package manager metadata
+2026-02-07 00:37:18,579 - Start: dnf5 update
+2026-02-07 00:37:20,193 - Finish: dnf5 update
+2026-02-07 00:37:20,341 - Finish: chroot init
+2026-02-07 00:37:20,343 - Start: build phase for zstd-1.5.7-2.fc43.src.rpm
+2026-02-07 00:37:20,345 - Start: build setup for zstd-1.5.7-2.fc43.src.rpm
+2026-02-07 00:37:26,060 - Finish: build setup for zstd-1.5.7-2.fc43.src.rpm
+2026-02-07 00:37:26,061 - Start: rpmbuild zstd-1.5.7-2.fc43.src.rpm
+2026-02-07 00:37:26,063 - Start: Outputting list of installed packages
+2026-02-07 00:37:26,184 - Finish: Outputting list of installed packages
+2026-02-07 00:41:48,950 - Finish: rpmbuild zstd-1.5.7-2.fc43.src.rpm
+2026-02-07 00:41:48,959 - Finish: build phase for zstd-1.5.7-2.fc43.src.rpm
+2026-02-07 00:41:48,962 - Start: clean chroot
+2026-02-07 00:41:51,391 - Finish: clean chroot
+2026-02-07 00:41:51,392 - Finish: run
