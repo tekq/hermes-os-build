@@ -44,7 +44,7 @@ def main():
         print(f"{pkg:<15} | {fedora_v:<20} | {my_v:<20} | {status}")
 
     if rebuild_list:
-	print(f"Triggering build for: {json.dumps(rebuild_list)}")
+        print(f"Triggering build for: {json.dumps(rebuild_list)}")
     else:
         print("\nAll packages up to date.")
 
