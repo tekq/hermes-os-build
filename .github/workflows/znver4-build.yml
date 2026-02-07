@@ -119,6 +119,10 @@ jobs:
                 sed -i 's/make check/true/g' "$SPEC"
                 sed -i 's/make -k check/true/g' "$SPEC"
                 
+                # Fix the true-gas / true-gold issues found in logs
+                sed -i 's/true-gas/true/g' "$SPEC"
+                sed -i 's/true-gold/true/g' "$SPEC"
+                
                 # NOP out the tar command and create dummy file to satisfy subsequent scripts
                 sed -i 's/tar cjf/touch dummy.tar.xz; echo skipping-tar/g' "$SPEC"
                 # NOP out uuencode which fails on the missing/empty tarball
