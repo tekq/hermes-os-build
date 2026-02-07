@@ -112,6 +112,11 @@ jobs:
           mkdir -p ./out/x86_64 ./out/i686
           cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
           cp bin_output/i686/*.rpm ./out/i686/ || true
+      - name: Upload Glibc Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-glibc
+          path: out/
   deploy:
     needs: [build, build-glibc]
     if: always() && (needs.build.result == 'success' || needs.build-glibc.result == 'success')
