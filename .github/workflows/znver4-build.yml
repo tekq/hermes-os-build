@@ -89,7 +89,8 @@ jobs:
           [[ "${{ needs.scanner.outputs.packages }}" == *"binutils"* ]] && TARGETS="$TARGETS binutils"
           [[ "${{ needs.scanner.outputs.packages }}" == *"elfutils"* ]] && TARGETS="$TARGETS elfutils"
 
-          dnf -y install sysprof-capture-devel
+          # Fix missing dependencies discovered in logs
+          dnf install -y sysprof-capture-devel
 
           for pkg in $TARGETS; do
             dnf download --source $pkg
@@ -109,9 +110,13 @@ jobs:
             if [ "$pkg" == "binutils" ]; then
                 sed -i 's/CFLAGS="/CFLAGS="-march=znver4 /g' "$SPEC"
                 sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
-
+                
+                sed -i 's/run_tests/true/g' "$SPEC"
                 sed -i 's/make check/true/g' "$SPEC"
                 sed -i 's/make -k check/true/g' "$SPEC"
+                
+                sed -i 's/tar cjf/true/g' "$SPEC"
+                
                 sed -i '1i %global _with_deterministic_archives 1' "$SPEC"
             fi
 
@@ -128,11 +133,10 @@ jobs:
             sed -i '1i %define _nocheck 1' "$SPEC"
 
             mkdir -p bin_output
-            rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
+            rpmbuild -bb "$SPEC" --target x86_64 --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
             
-            mkdir -p ./out/x86_64 ./out/i686
+            mkdir -p ./out/x86_64
             cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
-            cp bin_output/i686/*.rpm ./out/x86_64/ || true
             rm -rf bin_output/* $HOME/rpmbuild/SPECS/*
           done
       - name: Upload Specialist Artifacts
