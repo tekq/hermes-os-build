@@ -83,16 +83,19 @@ jobs:
           dnf download --source glibc
           dnf builddep -y glibc-*.src.rpm
           rpm -ivh glibc-*.src.rpm
-
-          sed -i 's/^%define build_cflags .*/%define build_cflags %{optflags} -march=znver4 -mtune=znver4/' ~/rpmbuild/SPECS/glibc.spec
-
+          
+          sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' ~/rpmbuild/SPECS/glibc.spec
+          
+          sed -i 's/%define build_32bit 1/%define build_32bit 0/' ~/rpmbuild/SPECS/glibc.spec
+          
           mkdir -p bin_output
           rpmbuild -bb ~/rpmbuild/SPECS/glibc.spec \
             --nocheck \
+            --define "with_multilib 0" \
             --define "_rpmdir $(pwd)/bin_output" \
             --define "debug_package %{nil}" \
             --define "_annotated_build 0"
-
+          
           mkdir -p ./x86_64/
           cp bin_output/x86_64/*.rpm ./x86_64/
       - name: Upload Glibc Artifacts
