@@ -1,4 +1,4 @@
-name: Scheduled v4 Optimization
+name: Znver4 build
 on:
   schedule:
     - cron: '0 2 * * *'
@@ -52,14 +52,20 @@ jobs:
               rm -rf bin_output/* $pkg-*.src.rpm
             done
 
+      - name: List results
+        run: ls -R x86_64/
+
       - name: Deploy to GitHub Pages
         if: steps.scanner.outputs.packages != ''
         run: |
+          git config --global --add safe.directory "*"
+
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
           createrepo_c ./x86_64/
+
           git add x86_64/
-          git commit -m "Automated v4 update: ${{ steps.scanner.outputs.packages }}"
-          git push
+
+          git diff-index --quiet HEAD || git commit -m "Automated update: ${{ steps.scanner.outputs.packages }}"
+          git push origin HEAD:main
