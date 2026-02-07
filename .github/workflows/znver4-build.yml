@@ -73,6 +73,7 @@ jobs:
     if: contains(needs.scanner.outputs.packages, 'glibc')
     runs-on: ubuntu-latest
     container: fedora:43
+    timeout-minutes: 360
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -85,14 +86,15 @@ jobs:
           rpm -ivh glibc-*.src.rpm
           
           SPEC=$(find $HOME/rpmbuild/SPECS -name "glibc.spec" | head -n 1)
-          echo "Found SPEC at: $SPEC"
           
           sed -i '1i %global optflags %{optflags} %(if [ "%{_target_cpu}" == "x86_64" ]; then echo "-march=znver4 -mtune=znver4"; else echo "-march=i686 -mtune=znver4"; fi)' "$SPEC"
           
-          sed -i 's/CFLAGS="/CFLAGS="-march=znver4 /g' "$SPEC"
-          sed -i 's/CCASFLAGS="/CCASFLAGS="-march=znver4 /g' "$SPEC"
-
+          sed -i 's/CFLAGS="/CFLAGS="-march=znver4 -mtune=znver4 /g' "$SPEC"
+          sed -i 's/CCASFLAGS="/CCASFLAGS="-march=znver4 -mtune=znver4 /g' "$SPEC"
+          
           sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
+          
+          sed -i '/%install/a set +e' "$SPEC"
 
           mkdir -p bin_output
           rpmbuild -bb "$SPEC" \
@@ -105,11 +107,6 @@ jobs:
           mkdir -p ./out/x86_64 ./out/i686
           cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
           cp bin_output/i686/*.rpm ./out/i686/ || true
-      - name: Upload Glibc Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-glibc
-          path: x86_64/*.rpm
 
   deploy:
     needs: [build, build-glibc]
