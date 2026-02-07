@@ -29,8 +29,9 @@ jobs:
       - name: Build Outdated Packages
         if: steps.scanner.outputs.packages != ''
         env:
-          CFLAGS: "-O3 -march=x86-64-v4 -mtune=generic"
-          CXXFLAGS: "-O3 -march=x86-64-v4 -mtune=generic"
+          CFLAGS: "-O3 -march=x86-64-v4 -mtune=generic -fPIE"
+          CXXFLAGS: "-O3 -march=x86-64-v4 -mtune=generic -fPIE"
+          LDFLAGS: "-pie -Wl,-z,relro -Wl,-z,now"
         run: |
           PKGS=$(echo "${{ steps.scanner.outputs.packages }}" | tr -d "[]'," )
 
