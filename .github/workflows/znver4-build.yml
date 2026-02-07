@@ -84,15 +84,17 @@ jobs:
           dnf builddep -y glibc-*.src.rpm
           rpm -ivh glibc-*.src.rpm
           
-          sed -i '1i %global optflags %{optflags} %(if [ "%{_target_cpu}" == "x86_64" ]; then echo "-march=znver4 -mtune=znver4"; else echo "-march=i686 -mtune=znver4"; fi)' ~/rpmbuild/SPECS/glibc.spec
+          SPEC="~/rpmbuild/SPECS/glibc.spec"
           
-          sed -i 's/march=x86-64/march=znver4/g' ~/rpmbuild/SPECS/glibc.spec
-          sed -i 's/mtune=generic/mtune=znver4/g' ~/rpmbuild/SPECS/glibc.spec
+          sed -i '1i %global optflags %{optflags} %(if [ "%{_target_cpu}" == "x86_64" ]; then echo "-march=znver4 -mtune=znver4"; else echo "-march=i686 -mtune=znver4"; fi)' $SPEC
           
-          sed -i '/%configure/a \  --enable-x86-64-v4 \\' ~/rpmbuild/SPECS/glibc.spec
+          sed -i 's/-march=x86-64/-march=znver4/g' $SPEC
+          sed -i 's/-mtune=generic/-mtune=znver4/g' $SPEC
+          
+          sed -i '/%configure/a \  --enable-x86-64-v4 \\' $SPEC
 
           mkdir -p bin_output
-          rpmbuild -bb ~/rpmbuild/SPECS/glibc.spec \
+          rpmbuild -bb $SPEC \
             --nocheck \
             --define "_rpmdir $(pwd)/bin_output" \
             --define "debug_package %{nil}" \
@@ -100,9 +102,9 @@ jobs:
           
           mkdir -p ./x86_64/
           cp bin_output/x86_64/*.rpm ./x86_64/
-
           mkdir -p ./i686/
           cp bin_output/i686/*.rpm ./i686/ || true
+
       - name: Upload Glibc Artifacts
         uses: actions/upload-artifact@v4
         with:
