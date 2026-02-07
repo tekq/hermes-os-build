@@ -28,10 +28,6 @@ jobs:
 
       - name: Build Outdated Packages
         if: steps.scanner.outputs.packages != ''
-        env:
-          CFLAGS: "-O3 -march=x86-64-v4 -mtune=generic -fPIE"
-          CXXFLAGS: "-O3 -march=x86-64-v4 -mtune=generic -fPIE"
-          LDFLAGS: "-pie -Wl,-z,relro -Wl,-z,now"
         run: |
           PKGS=$(echo "${{ steps.scanner.outputs.packages }}" | tr -d "[]'," )
 
@@ -42,17 +38,19 @@ jobs:
 
             mkdir -p bin_output
 
-            rpmbuild --rebuild $pkg-*.src.rpm \
+            rpm -ivh $pkg-*.src.rpm
+
+            sed -i 's/%set_build_flags/export CFLAGS="%{optflags} -march=x86-64-v4 -mtune=generic"\n%set_build_flags/' ~/rpmbuild/SPECS/*.spec
+
+            rpmbuild -bb ~/rpmbuild/SPECS/*.spec \
               --nocheck \
               --define "_rpmdir $(pwd)/bin_output" \
-              --define "optflags $CFLAGS" \
               --define "debug_package %{nil}" \
-              --define "_annotated_build 0" \
-              --undefine "_package_note_file"
+              --define "_annotated_build 0"
 
-            cp bin_output/x86_64/*.rpm ./x86_64/
-            rm -rf bin_output/* $pkg-*.src.rpm
-          done
+              cp bin_output/x86_64/*.rpm ./x86_64/
+              rm -rf bin_output/* $pkg-*.src.rpm
+            done
 
       - name: Deploy to GitHub Pages
         if: steps.scanner.outputs.packages != ''
