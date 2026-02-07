@@ -41,13 +41,16 @@ jobs:
             dnf builddep -y $pkg-*.src.rpm
 
             mkdir -p bin_output
+
             rpmbuild --rebuild $pkg-*.src.rpm \
               --nocheck \
               --define "_rpmdir $(pwd)/bin_output" \
               --define "optflags $CFLAGS" \
               --define "build_ldflags $LDFLAGS" \
-              --define "_optimization_level 3"
-              --define "debug_package %{nil}"
+              --define "_optimization_level 3" \
+              --define "debug_package %{nil}" \
+              --define "_annotated_build 0" \
+              --undefine "_package_note_file"
 
             cp bin_output/x86_64/*.rpm ./x86_64/
             rm -rf bin_output/* $pkg-*.src.rpm
