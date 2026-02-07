@@ -1,4 +1,4 @@
-name: Znver4 build
+name: Znver4 Build
 on:
   schedule:
     - cron: '0 0 * * *'
@@ -8,36 +8,46 @@ permissions:
   contents: write
 
 jobs:
-  check-and-build:
+  scanner:
     runs-on: ubuntu-latest
-    container:
-      image: fedora:43
-
+    container: fedora:43
+    outputs:
+      packages: ${{ steps.check.outputs.packages }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Install System Tools
-        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make createrepo_c git python3
-
+      - name: Install Python
+        run: dnf install -y python3
       - name: Run Hit List Check
-        id: scanner
+        id: check
         run: |
           UPDATES=$(python3 check_updates.py | grep "Triggering build for:" | sed 's/Triggering build for: //')
           echo "packages=$UPDATES" >> $GITHUB_OUTPUT
 
-      - name: Build Outdated Packages
-        if: steps.scanner.outputs.packages != ''
+  build:
+    needs: scanner
+    if: needs.scanner.outputs.packages != '' && needs.scanner.outputs.packages != '[]'
+    runs-on: ubuntu-latest
+    container: fedora:43
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Install System Tools
+        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git python3
+      - name: Build Loop
         run: |
-          PKGS=$(echo "${{ steps.scanner.outputs.packages }}" | tr -d "[]'," )
+          PKGS=$(echo "${{ needs.scanner.outputs.packages }}" | tr -d "[]'," | sed 's/glibc//g')
+
+          if [ -z "$PKGS" ]; then
+            echo "No general packages to build."
+            exit 0
+          fi
 
           for pkg in $PKGS; do
             echo "--- Processing $pkg ---"
             dnf download --source $pkg
             dnf builddep -y $pkg-*.src.rpm
-
             mkdir -p bin_output
-
             rpm -ivh $pkg-*.src.rpm
 
             sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' ~/rpmbuild/SPECS/*.spec
@@ -48,43 +58,71 @@ jobs:
               --define "debug_package %{nil}" \
               --define "_annotated_build 0"
 
-              cp bin_output/x86_64/*.rpm ./x86_64/
-              rm -rf bin_output/* $pkg-*.src.rpm
-            done
-
-      - name: List results
-        run: ls -R x86_64/
-
-      - name: Upload Artifacts
+            mkdir -p ./x86_64/
+            cp bin_output/x86_64/*.rpm ./x86_64/
+            rm -rf bin_output/* ~/rpmbuild/SPECS/* $pkg-*.src.rpm
+          done
+      - name: Upload General Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: optimized-rpms
-          path: x86_64/
+          name: build-general
+          path: x86_64/*.rpm
 
-  deploy:
-    needs: check-and-build
+  build-glibc:
+    needs: scanner
+    if: contains(needs.scanner.outputs.packages, 'glibc')
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    container: fedora:43
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+      - name: Install System Tools
+        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
+      - name: Build Glibc
+        run: |
+          dnf download --source glibc
+          dnf builddep -y glibc-*.src.rpm
+          rpm -ivh glibc-*.src.rpm
+
+          sed -i 's/^%define build_cflags .*/%define build_cflags %{optflags} -march=znver4 -mtune=znver4/' ~/rpmbuild/SPECS/glibc.spec
+
+          mkdir -p bin_output
+          rpmbuild -bb ~/rpmbuild/SPECS/glibc.spec \
+            --nocheck \
+            --define "_rpmdir $(pwd)/bin_output" \
+            --define "debug_package %{nil}" \
+            --define "_annotated_build 0"
+
+          mkdir -p ./x86_64/
+          cp bin_output/x86_64/*.rpm ./x86_64/
+      - name: Upload Glibc Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-glibc
+          path: x86_64/*.rpm
+
+  deploy:
+    needs: [build, build-glibc]
+    if: always() && (needs.build.result == 'success' || needs.build-glibc.result == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Download Artifacts
+      - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: optimized-rpms
           path: x86_64/
-
-      - name: Deploy to GitHub Pages
+          merge-multiple: true
+      - name: Generate Repo and Push
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
           sudo apt-get update && sudo apt-get install -y createrepo-c
-
           createrepo_c x86_64/
 
           git add x86_64/
-          git diff-index --quiet HEAD || (git commit -m "update RPMs" && git push)
+          git diff-index --quiet HEAD || (git commit -m "Automated Zen4 update: General + Glibc" && git push)
