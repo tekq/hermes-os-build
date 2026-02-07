@@ -55,9 +55,9 @@ jobs:
       - name: Deploy to GitHub Pages
         if: steps.scanner.outputs.packages != ''
         run: |
-          git config --global --add safe.directory $(pwd)
-          git config --global user.name "stella-build-bot"
-          git config --global user.email "stella@dev.local"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
           createrepo_c ./x86_64/
           git add x86_64/
