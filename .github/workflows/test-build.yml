@@ -40,7 +40,7 @@ jobs:
 
             rpm -ivh $pkg-*.src.rpm
 
-            sed -i 's/%set_build_flags/export CFLAGS="%{optflags} -march=x86-64-v4 -mtune=generic"\n%set_build_flags/' ~/rpmbuild/SPECS/*.spec
+            sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' ~/rpmbuild/SPECS/*.spec
 
             rpmbuild -bb ~/rpmbuild/SPECS/*.spec \
               --nocheck \
