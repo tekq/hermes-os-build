@@ -84,8 +84,8 @@ jobs:
           dnf builddep -y glibc-*.src.rpm
           rpm -ivh glibc-*.src.rpm
           
-          sed -i '1i %global ix86 %{nil}' ~/rpmbuild/SPECS/glibc.spec
           sed -i '1i %global build_32bit 0' ~/rpmbuild/SPECS/glibc.spec
+          sed -i '1i %global with_multilib 0' ~/rpmbuild/SPECS/glibc.spec
           
           sed -i 's/march=x86-64/march=znver4/g' ~/rpmbuild/SPECS/glibc.spec
           sed -i 's/mtune=generic/mtune=znver4/g' ~/rpmbuild/SPECS/glibc.spec
