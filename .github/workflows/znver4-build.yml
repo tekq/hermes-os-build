@@ -89,12 +89,14 @@ jobs:
           sed -i 's/^%define build_cflags .*/%define build_cflags %{optflags}/' ~/rpmbuild/SPECS/glibc.spec
           
           sed -i 's/%define build_32bit 1/%define build_32bit 0/' ~/rpmbuild/SPECS/glibc.spec
+          sed -i 's/%define with_multilib 1/%define with_multilib 0/' ~/rpmbuild/SPECS/glibc.spec
 
           mkdir -p bin_output
           rpmbuild -bb ~/rpmbuild/SPECS/glibc.spec \
+            --target x86_64 \
             --nocheck \
-            --define "with_multilib 0" \
             --define "build_32bit 0" \
+            --define "with_multilib 0" \
             --define "_rpmdir $(pwd)/bin_output" \
             --define "debug_package %{nil}" \
             --define "_annotated_build 0" \
