@@ -7,7 +7,7 @@ PACKAGES = [
     "xz", 
     "openssl", 
     "lz4", 
-    # "glibc",
+    "glibc",
     "binutils",
     "elfutils"
 ]
