@@ -88,17 +88,19 @@ jobs:
           
           SPEC=$(find $HOME/rpmbuild/SPECS -name "glibc.spec" | head -n 1)
           
-          sed -i '1i %global optflags %{optflags} %(if [ "%{_target_cpu}" == "x86_64" ]; then echo "-march=znver4 -mtune=znver4"; else echo "-march=i686 -mtune=znver4"; fi)' "$SPEC"
+          sed -i '1i %global optflags %{optflags} -mtune=znver4' "$SPEC"
           
           sed -i 's/CFLAGS="/CFLAGS="-march=znver4 -mtune=znver4 /g' "$SPEC"
-          sed -i 's/CCASFLAGS="/CCASFLAGS="-march=znver4 -mtune=znver4 /g' "$SPEC"
           
           sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
-
-          sed -i 's/SUPPORTED-LOCALES/C.UTF-8\/UTF-8 en_US.UTF-8\/UTF-8/g' "$SPEC"
           
+          sed -i '1i %global skip_libc_all_locales 1' "$SPEC"
           sed -i '1i %global with_doc 0' "$SPEC"
           sed -i '1i %global run_glibc_tests 0' "$SPEC"
+
+          sed -i '/^%install/a \
+          mkdir -p %{buildroot}%{_prefix}/lib/locale/C.utf8 \
+          touch %{buildroot}%{_prefix}/lib/locale/C.utf8/address-marker' "$SPEC"
 
           mkdir -p bin_output
           rpmbuild -bb "$SPEC" \
@@ -108,12 +110,11 @@ jobs:
             --define "_annotated_build 0" \
             --define "run_glibc_tests 0" \
             --define "with_doc 0" \
-            --define "_smp_mflags -j$(nproc)"
+            --define "skip_libc_all_locales 1"
           
           mkdir -p ./out/x86_64 ./out/i686
           cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
           cp bin_output/i686/*.rpm ./out/i686/ || true
-
   deploy:
     needs: [build, build-glibc]
     if: always() && (needs.build.result == 'success' || needs.build-glibc.result == 'success')
