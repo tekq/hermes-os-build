@@ -119,8 +119,10 @@ jobs:
                 sed -i 's/make check/true/g' "$SPEC"
                 sed -i 's/make -k check/true/g' "$SPEC"
                 
-                # NOP out the tar command that fails on missing logs
-                sed -i 's/tar cjf/echo skipping-tar/g' "$SPEC"
+                # NOP out the tar command and create dummy file to satisfy subsequent scripts
+                sed -i 's/tar cjf/touch dummy.tar.xz; echo skipping-tar/g' "$SPEC"
+                # NOP out uuencode which fails on the missing/empty tarball
+                sed -i 's/uuencode/echo skipping-uuencode/g' "$SPEC"
                 
                 sed -i '1i %global _with_deterministic_archives 1' "$SPEC"
             fi
