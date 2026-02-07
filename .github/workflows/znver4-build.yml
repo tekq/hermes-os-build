@@ -96,6 +96,11 @@ jobs:
           
           sed -i '/%install/a set +e' "$SPEC"
 
+          sed -i '1i %global skip_libc_all_locales 1' "$SPEC"
+          sed -i '1i %global with_doc 0' "$SPEC"
+          sed -i '1i %global run_glibc_tests 0' "$SPEC"
+
+
           mkdir -p bin_output
           rpmbuild -bb "$SPEC" \
             --nocheck \
