@@ -154,7 +154,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-specialists
-          path: out/
+          path: out/x86_64/*.rpm
   deploy:
     needs: [build, build-specials]
     if: always() && (needs.build.result == 'success' || needs.build-specials.result == 'success')
@@ -174,9 +174,17 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
+          
           sudo apt-get update && sudo apt-get install -y createrepo-c
+          
+          mkdir -p x86_64
+          mv -f incoming_rpms/*.rpm x86_64/ 2>/dev/null || true
+          
+          # Cleanup any potential leftover subdirs
+          rm -rf i686 
+          
+          touch .nojekyll
           createrepo_c x86_64/
-
-          git add x86_64/
-          git diff-index --quiet HEAD || (git commit -m "Automated Zen4 update: General + Glibc" && git push)
+          
+          git add .nojekyll x86_64/
+          git diff-index --quiet HEAD || (git commit -m "Zen4 update: Optimized deployment structure" && git push)
