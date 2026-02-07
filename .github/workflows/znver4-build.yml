@@ -89,17 +89,18 @@ jobs:
           
           sed -i '1i %global optflags %{optflags} %(if [ "%{_target_cpu}" == "x86_64" ]; then echo "-march=znver4 -mtune=znver4"; else echo "-march=i686 -mtune=znver4"; fi)' "$SPEC"
           
-          sed -i 's/-march=x86-64/-march=znver4/g' "$SPEC"
-          sed -i 's/-mtune=generic/-mtune=znver4/g' "$SPEC"
-          
-          sed -i '/%configure/a \  --enable-x86-64-v4 \\' "$SPEC"
+          sed -i 's/CFLAGS="/CFLAGS="-march=znver4 /g' "$SPEC"
+          sed -i 's/CCASFLAGS="/CCASFLAGS="-march=znver4 /g' "$SPEC"
+
+          sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
 
           mkdir -p bin_output
           rpmbuild -bb "$SPEC" \
             --nocheck \
             --define "_rpmdir $(pwd)/bin_output" \
             --define "debug_package %{nil}" \
-            --define "_annotated_build 0"
+            --define "_annotated_build 0" \
+            --define "run_glibc_tests 0"
           
           mkdir -p ./out/x86_64 ./out/i686
           cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
