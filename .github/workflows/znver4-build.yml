@@ -84,27 +84,26 @@ jobs:
           dnf builddep -y glibc-*.src.rpm
           rpm -ivh glibc-*.src.rpm
           
-          SPEC="~/rpmbuild/SPECS/glibc.spec"
+          SPEC=$(find $HOME/rpmbuild/SPECS -name "glibc.spec" | head -n 1)
+          echo "Found SPEC at: $SPEC"
           
-          sed -i '1i %global optflags %{optflags} %(if [ "%{_target_cpu}" == "x86_64" ]; then echo "-march=znver4 -mtune=znver4"; else echo "-march=i686 -mtune=znver4"; fi)' $SPEC
+          sed -i '1i %global optflags %{optflags} %(if [ "%{_target_cpu}" == "x86_64" ]; then echo "-march=znver4 -mtune=znver4"; else echo "-march=i686 -mtune=znver4"; fi)' "$SPEC"
           
-          sed -i 's/-march=x86-64/-march=znver4/g' $SPEC
-          sed -i 's/-mtune=generic/-mtune=znver4/g' $SPEC
+          sed -i 's/-march=x86-64/-march=znver4/g' "$SPEC"
+          sed -i 's/-mtune=generic/-mtune=znver4/g' "$SPEC"
           
-          sed -i '/%configure/a \  --enable-x86-64-v4 \\' $SPEC
+          sed -i '/%configure/a \  --enable-x86-64-v4 \\' "$SPEC"
 
           mkdir -p bin_output
-          rpmbuild -bb $SPEC \
+          rpmbuild -bb "$SPEC" \
             --nocheck \
             --define "_rpmdir $(pwd)/bin_output" \
             --define "debug_package %{nil}" \
             --define "_annotated_build 0"
           
-          mkdir -p ./x86_64/
-          cp bin_output/x86_64/*.rpm ./x86_64/
-          mkdir -p ./i686/
-          cp bin_output/i686/*.rpm ./i686/ || true
-
+          mkdir -p ./out/x86_64 ./out/i686
+          cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
+          cp bin_output/i686/*.rpm ./out/i686/ || true
       - name: Upload Glibc Artifacts
         uses: actions/upload-artifact@v4
         with:
