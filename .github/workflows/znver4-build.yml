@@ -89,8 +89,10 @@ jobs:
           
           sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' ~/rpmbuild/SPECS/glibc.spec
           
+          sed -i '/%configure/a \  --enable-x86-64-v4 \\' ~/rpmbuild/SPECS/glibc.spec
+
           sed -i 's/%define build_32bit 1/%define build_32bit 0/g' ~/rpmbuild/SPECS/glibc.spec
-          sed -i '/build-x86_64-redhat-linux-32/d' ~/rpmbuild/SPECS/glibc.spec
+          sed -i 's/build-x86_64-redhat-linux-32/skipped-32bit/g' ~/rpmbuild/SPECS/glibc.spec
 
           mkdir -p bin_output
           rpmbuild -bb ~/rpmbuild/SPECS/glibc.spec \
@@ -100,7 +102,8 @@ jobs:
             --define "with_multilib 0" \
             --define "_rpmdir $(pwd)/bin_output" \
             --define "debug_package %{nil}" \
-            --define "_annotated_build 0"
+            --define "_annotated_build 0" \
+            --define "__multilib_flag %{nil}"
           
           mkdir -p ./x86_64/
           cp bin_output/x86_64/*.rpm ./x86_64/
