@@ -2,7 +2,7 @@ import subprocess
 import json
 import sys
 
-PACKAGES = ["zstd"]
+PACKAGES = ["zstd", "xz", "openssl"]
 MY_REPO_URL = "https://tekq.github.io/fhp-build/x86_64/"
 FEDORA_RELEASE = "43"
 
