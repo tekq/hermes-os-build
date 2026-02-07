@@ -88,19 +88,16 @@ jobs:
           
           SPEC=$(find $HOME/rpmbuild/SPECS -name "glibc.spec" | head -n 1)
           
-          sed -i '1i %global optflags %{optflags} -mtune=znver4' "$SPEC"
-          
-          sed -i 's/CFLAGS="/CFLAGS="-march=znver4 -mtune=znver4 /g' "$SPEC"
+          sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' "$SPEC"
           
           sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
           
-          sed -i '1i %global skip_libc_all_locales 1' "$SPEC"
+          sed -i 's/make install/make install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
+          
           sed -i '1i %global with_doc 0' "$SPEC"
           sed -i '1i %global run_glibc_tests 0' "$SPEC"
 
-          sed -i '/^%install/a \
-          mkdir -p %{buildroot}%{_prefix}/lib/locale/C.utf8 \
-          touch %{buildroot}%{_prefix}/lib/locale/C.utf8/address-marker' "$SPEC"
+          sed -i '1i %global _install_langs en_US:en:C:utf-8:UTF-8' "$SPEC"
 
           mkdir -p bin_output
           rpmbuild -bb "$SPEC" \
@@ -110,7 +107,7 @@ jobs:
             --define "_annotated_build 0" \
             --define "run_glibc_tests 0" \
             --define "with_doc 0" \
-            --define "skip_libc_all_locales 1"
+            --define "_smp_mflags -j$(nproc)"
           
           mkdir -p ./out/x86_64 ./out/i686
           cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
