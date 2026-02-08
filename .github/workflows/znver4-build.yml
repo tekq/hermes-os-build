@@ -18,6 +18,9 @@ jobs:
         uses: actions/checkout@v4
       - name: Install Python
         run: dnf install -y python3
+      - name: Check Needed Updates (debug)
+        run: |
+          python3 check_updates.py
       - name: Run Hit List Check
         id: check
         run: |
@@ -34,7 +37,7 @@ jobs:
         uses: actions/checkout@v4
       - name: Install System Tools
         run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git python3
-      - name: Build Loop
+      - name: Build Regular
         run: |
           PKGS=$(echo "${{ needs.scanner.outputs.packages }}" | tr -d "[]'," | sed -E 's/(glibc|binutils|elfutils)//g')
 
@@ -68,7 +71,7 @@ jobs:
           name: build-general
           path: x86_64/*.rpm
 
-  build-specials:
+  build-utils:
     needs: scanner
     if: |
       contains(needs.scanner.outputs.packages, 'glibc') || 
@@ -82,10 +85,9 @@ jobs:
         uses: actions/checkout@v4
       - name: Install System Tools
         run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
-      - name: Build Specials
+      - name: Build Utils
         run: |
           TARGETS=""
-          [[ "${{ needs.scanner.outputs.packages }}" == *"glibc"* ]] && TARGETS="$TARGETS glibc"
           [[ "${{ needs.scanner.outputs.packages }}" == *"binutils"* ]] && TARGETS="$TARGETS binutils"
           [[ "${{ needs.scanner.outputs.packages }}" == *"elfutils"* ]] && TARGETS="$TARGETS elfutils"
 
@@ -100,13 +102,6 @@ jobs:
 
             # Global Tune for Runner Safety, March for Libraries
             sed -i '1i %global optflags %{optflags} -mtune=znver4' "$SPEC"
-            
-            if [ "$pkg" == "glibc" ]; then
-                sed -i 's/CFLAGS="/CFLAGS="-march=znver4 /g' "$SPEC"
-                sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
-                sed -i 's/make install/make install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
-                sed -i '1i %global _install_langs en_US:en:C:utf-8:UTF-8' "$SPEC"
-            fi
 
             if [ "$pkg" == "binutils" ]; then
                 sed -i 's/CFLAGS="/CFLAGS="-march=znver4 /g' "$SPEC"
@@ -155,9 +150,57 @@ jobs:
         with:
           name: build-specialists
           path: out/x86_64/*.rpm
+          
+  build-glibc:
+    needs: scanner
+    if: contains(needs.scanner.outputs.packages, 'glibc')
+    runs-on: ubuntu-latest
+    container: fedora:43
+    timeout-minutes: 360
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Install System Tools
+        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
+      - name: Build Glibc
+        run: |
+          dnf download --source glibc
+          dnf builddep -y glibc-*.src.rpm
+          rpm -ivh glibc-*.src.rpm
+          rm -f glibc-*.src.rpm
+          
+          SPEC=$(find $HOME/rpmbuild/SPECS -name "glibc.spec" | head -n 1)
+          
+          sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' "$SPEC"
+          
+          sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
+          
+          sed -i 's/make install/make install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
+          
+          sed -i '1i %global with_doc 0' "$SPEC"
+          sed -i '1i %global run_glibc_tests 0' "$SPEC"
+          sed -i '1i %global _install_langs en_US:en:C:utf-8:UTF-8' "$SPEC"
+          mkdir -p bin_output
+          rpmbuild -bb "$SPEC" \
+            --nocheck \
+            --define "_rpmdir $(pwd)/bin_output" \
+            --define "debug_package %{nil}" \
+            --define "_annotated_build 0" \
+            --define "run_glibc_tests 0" \
+            --define "with_doc 0" \
+            --define "_smp_mflags -j$(nproc)"
+          
+          mkdir -p ./out/x86_64 ./out/i686
+          cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
+          cp bin_output/i686/*.rpm ./out/x86_64/ || true
+      - name: Upload Glibc Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-glibc
+          path: out/x86_64/*.rpm
   deploy:
-    needs: [build, build-specials]
-    if: always() && (needs.build.result == 'success' || needs.build-specials.result == 'success')
+    needs: [build, build-utils, build-glibc]
+    if: always() && (needs.build.result == 'success' || needs.build-utils.result == 'success' || needs.build-glibc.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
@@ -179,10 +222,7 @@ jobs:
           
           mkdir -p x86_64
           mv -f incoming_rpms/*.rpm x86_64/ 2>/dev/null || true
-          
-          # Cleanup any potential leftover subdirs
-          rm -rf i686 
-          
+                    
           touch .nojekyll
           createrepo_c x86_64/
           
