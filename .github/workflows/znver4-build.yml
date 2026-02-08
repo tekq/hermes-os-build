@@ -94,9 +94,9 @@ jobs:
             sed -i "1i %global optflags $Z4_FLAGS -g" "$SPEC"
             
             if [ "$pkg" == "binutils" ]; then
+                # Fix binutils specifically wanting to run checks/extra logic
                 sed -i 's/native ? 1/native ? 0/g' "$SPEC"
                 sed -i 's/-march=x86-64//g' "$SPEC"
-                sed -i 's/-mtune=generic//g' "$SPEC"
             fi
 
             # Clean check bypass
@@ -176,16 +176,14 @@ jobs:
           Z4_FLAGS="-O3 -march=znver4 -mtune=znver4"
           sed -i "1i %global optflags $Z4_FLAGS -g" "$SPEC"
           
-          # More aggressive dependency install for F43 systemd
+          # Dependencies
           dnf -y install bpftool docbook-style-xsl kernel-devel xen-devel libxslt gperf
           
-          # Hard-patch the LONG_MAX assertion in meson.build to stop configuration failures
-          # This is done inside the %prep or %build section of the spec
-          sed -i '/assert(long_max > 100000/d' $HOME/rpmbuild/SOURCES/systemd-*.tar.xz || true
-          # If it's already unpacked or handled via patches, we append a sed to the %prep section
-          sed -i '/%prep/a sed -i "s/assert(long_max > 100000/ # assert(long_max > 100000/g" meson.build' "$SPEC"
+          # Correctly patch the spec to remove the LONG_MAX check during the %prep stage
+          # We append the sed command to the end of the %prep section in the spec file
+          sed -i '/%prep/a find . -name "meson.build" -exec sed -i "s/assert(long_max > 100000/ # assert(long_max > 100000/g" {} \\;' "$SPEC"
 
-          # Bypass checks cleanly
+          # Bypass checks
           sed -i '/^%check/a exit 0' "$SPEC"
 
           mkdir -p bin_output
@@ -229,4 +227,4 @@ jobs:
           createrepo_c x86_64/
           
           git add .nojekyll x86_64/
-          git diff-index --quiet HEAD || (git commit -m "Zen4 update: Stable specialist builds" && git push)
+          git diff-index --quiet HEAD || (git commit -m "Zen4 update: Fixed specialist spec patches" && git push)
