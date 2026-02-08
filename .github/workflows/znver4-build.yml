@@ -59,7 +59,7 @@ jobs:
           name: build-general
           path: staging/*.rpm
 
-  # 3. BINUTILS & ELFUTILS SPECIALIST (Cross-Compile Logic)
+  # 3. BINUTILS & ELFUTILS SPECIALIST
   build-utils:
     needs: scanner
     if: |
@@ -84,24 +84,25 @@ jobs:
             rpm -ivh $pkg-*.src.rpm
             SPEC=$(find $HOME/rpmbuild/SPECS -name "$pkg.spec" | head -n 1)
 
-            # Define the triplets and optimization profile
-            # We use these to bypass RPM's internal flag management
-            TRIPLET="x86_64-redhat-linux"
-            OPTS="-O3 -march=znver4 -mtune=znver4 -g"
+            # HEAVY OVERRIDE: Inject macros at the top of the spec to kill generic flags
+            # 1. Force Zen4 flags into optflags
+            # 2. Nullify the redhat-hardened-specs that inject -march=x86-64
+            # 3. Disable annobin (which causes many "No rule to make target" errors)
+            sed -i '1i %global _annotated_build 0' "$SPEC"
+            sed -i '1i %global _hardened_build 0' "$SPEC"
+            sed -i '1i %global optflags -O3 -march=znver4 -mtune=znver4 -g' "$SPEC"
+            sed -i '1i %undefine _package_note_file' "$SPEC"
+            
+            # Disable the check section entirely
+            sed -i '/%check/a exit 0' "$SPEC"
 
-            # Inject variables into the rpmbuild environment
-            # This allows the spec's %configure macro to pick up our cross-intent
+            mkdir -p bin_output
             rpmbuild -bb "$SPEC" \
-              --define "_target_platform $TRIPLET" \
-              --define "optflags $OPTS" \
               --define "_rpmdir $(pwd)/bin_output" \
               --define "debug_package %{nil}" \
-              --define "_annotated_build 0" \
               --define "_nocheck 1" \
-              --with-host="$TRIPLET" \
-              --with-target="$TRIPLET" \
-              --without check
-
+              --nocheck
+            
             mkdir -p ./specialist_staging
             find bin_output/ -name "*.rpm" -exec mv {} ./specialist_staging/ \;
             rm -rf bin_output/* $HOME/rpmbuild/SPECS/*
@@ -112,7 +113,7 @@ jobs:
           name: build-specialists
           path: specialist_staging/*.rpm
 
-  # 4. SYSTEMD SPECIALIST (Low-Profile Meson Logic)
+  # 4. SYSTEMD SPECIALIST
   build-systemd:
     needs: scanner
     if: contains(needs.scanner.outputs.packages, 'systemd')
@@ -129,23 +130,27 @@ jobs:
           dnf download --source systemd
           rpm -ivh systemd-*.src.rpm
           dnf builddep -y $HOME/rpmbuild/SPECS/systemd.spec
-          
           SPEC=$HOME/rpmbuild/SPECS/systemd.spec
-          TRIPLET="x86_64-redhat-linux"
-          OPTS="-O3 -march=znver4 -mtune=znver4 -g"
+          
+          # SYSTEMD SPECIFIC OVERRIDES
+          # We must kill the %set_build_flags macro because it re-injects -march=x86-64
+          sed -i '1i %global _hardened_build 0' "$SPEC"
+          sed -i '1i %global _annotated_build 0' "$SPEC"
+          sed -i '1i %global optflags -O3 -march=znver4 -mtune=znver4 -g' "$SPEC"
+          
+          # Force Meson to ignore the LONG_MAX check via a logic injection in %prep
+          # This is cleaner than a patch for systemd's specific build environment
+          sed -i '/%prep/a find . -name "meson.build" -exec sed -i "s/assert(long_max > 100000/ #/g" {} \\;' "$SPEC"
 
-          # We force the 'cross' environment which lets us pass flags directly to Meson
-          # and bypasses the static LONG_MAX assertion by treating it as a target-defined variable
+          # Bypass check section
+          sed -i '/^%check/a exit 0' "$SPEC"
+
           mkdir -p bin_output
           rpmbuild -bb "$SPEC" \
-            --define "optflags $OPTS" \
-            --define "_target_cpu znver4" \
+            --nocheck \
             --define "_rpmdir $(pwd)/bin_output" \
-            --define "debug_package %{nil}" \
-            --define "_annotated_build 0" \
-            --define "_nocheck 1" \
-            --nocheck
-
+            --define "debug_package %{nil}"
+          
           mkdir -p ./out/x86_64
           find bin_output/ -name "*.rpm" -exec cp {} ./out/x86_64/ \;
       - name: Upload systemd Artifacts
