@@ -124,6 +124,8 @@ jobs:
           config_opts['macros']['%_hardened_build'] = '0'
           config_opts['macros']['%optflags'] = '-O3 -march=znver4 -mtune=znver4 -g'
           config_opts['macros']['%_nocheck'] = '1'
+          config_opts['macros']['%_distro_extra_cflags'] = '-march=znver4 -mtune=znver4 -O3'
+          config_opts['macros']['%_distro_extra_cxxflags'] = '-march=znver4 -mtune=znver4 -O3'
           EOF
 
           for pkg in $TARGETS; do
@@ -170,6 +172,8 @@ jobs:
           config_opts['macros']['%_annotated_build'] = '0'
           config_opts['macros']['%_hardened_build'] = '0'
           config_opts['macros']['%optflags'] = '-O3 -march=znver4 -mtune=znver4 -g'
+          config_opts['macros']['%_distro_extra_cflags'] = '-march=znver4 -mtune=znver4 -O3'
+          config_opts['macros']['%_distro_extra_cxxflags'] = '-march=znver4 -mtune=znver4 -O3'
           # We use a post-cache script to surgicaly fix meson before the build starts
           config_opts['post_install_scripts'] = [
               ('bash', '-c', 'find /builddir/build/BUILD -name "meson.build" -exec sed -i "s/assert(long_max > 100000/ #/g" {} \\; || true')
