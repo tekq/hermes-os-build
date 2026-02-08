@@ -245,8 +245,8 @@ jobs:
           path: out/x86_64/*.rpm
 
   deploy:
-    needs: [build, build-utils, build-glibc]
-    if: always() && (needs.build.result == 'success' || needs.build-utils.result == 'success' || needs.build-glibc.result == 'success')
+    needs: [build, build-utils, build-glibc, build-systemd]
+    if: always() && (needs.build.result == 'success' || needs.build-utils.result == 'success' || needs.build-glibc.result == 'success' || needs.build-systemd.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
