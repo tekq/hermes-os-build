@@ -3,6 +3,7 @@ import json
 import sys
 
 PACKAGES = [
+    "systemd",
     "zstd", 
     "xz", 
     "openssl", 
