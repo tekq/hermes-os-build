@@ -91,7 +91,6 @@ jobs:
           [[ "${{ needs.scanner.outputs.packages }}" == *"binutils"* ]] && TARGETS="$TARGETS binutils"
           [[ "${{ needs.scanner.outputs.packages }}" == *"elfutils"* ]] && TARGETS="$TARGETS elfutils"
 
-          # Fix missing dependencies discovered in logs
           dnf install -y sysprof-capture-devel
 
           for pkg in $TARGETS; do
@@ -100,49 +99,42 @@ jobs:
             rpm -ivh $pkg-*.src.rpm
             SPEC=$(find $HOME/rpmbuild/SPECS -name "$pkg.spec" | head -n 1)
 
-            # Global Tune for Runner Safety, March for Libraries
-            sed -i '1i %global optflags %{optflags} -mtune=znver4' "$SPEC"
-
+            # Force Zen4 for both the build system and the resulting code
+            sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4 -O3' "$SPEC"
+            
             if [ "$pkg" == "binutils" ]; then
-                sed -i 's/CFLAGS="/CFLAGS="-march=znver4 /g' "$SPEC"
+                # Aggressive injection for binutils recursive make
+                sed -i 's/CFLAGS="/CFLAGS="-march=znver4 -O3 /g' "$SPEC"
+                # XCFLAGS and BOOT_CFLAGS are often used in binutils/gcc multi-stage builds
+                sed -i '/%configure/ i export XCFLAGS="-march=znver4 -O3"\nexport BOOT_CFLAGS="-march=znver4 -O3"' "$SPEC"
                 sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
                 
-                # Define run_tests as a no-op at the start of %build
                 sed -i '/%build/a run_tests() { :; }' "$SPEC"
-                
-                # Disable standard make check calls
                 sed -i 's/make check/true/g' "$SPEC"
                 sed -i 's/make -k check/true/g' "$SPEC"
-                
-                # Fix the true-gas / true-gold issues found in logs
                 sed -i 's/true-gas/true/g' "$SPEC"
                 sed -i 's/true-gold/true/g' "$SPEC"
-                
-                # NOP out the tar command and create dummy file to satisfy subsequent scripts
                 sed -i 's/tar cjf/touch dummy.tar.xz; echo skipping-tar/g' "$SPEC"
-                # NOP out uuencode which fails on the missing/empty tarball
                 sed -i 's/uuencode/echo skipping-uuencode/g' "$SPEC"
-                
                 sed -i '1i %global _with_deterministic_archives 1' "$SPEC"
             fi
 
             if [ "$pkg" == "elfutils" ]; then
-                # Elfutils libraries get Zen4 instructions
-                sed -i 's/CFLAGS="/CFLAGS="-march=znver4 /g' "$SPEC"
-                # Disable checks that try to execute the just-built backends
+                # Elfutils hardcodes some CFLAGS in its nested Makefiles; we override them here
+                sed -i 's/CFLAGS="/CFLAGS="-march=znver4 -O3 /g' "$SPEC"
+                sed -i '/%configure/ i export CFLAGS_FOR_BUILD="-march=znver4 -O3"' "$SPEC"
                 sed -i 's/make check/true/g' "$SPEC"
                 sed -i 's/%{make_build} check/true/g' "$SPEC"
             fi
 
             sed -i '1i %global with_doc 0' "$SPEC"
-            sed -i '1i %global run_glibc_tests 0' "$SPEC"
             sed -i '1i %define _nocheck 1' "$SPEC"
 
             mkdir -p bin_output
             rpmbuild -bb "$SPEC" --target x86_64 --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
             
-            mkdir -p ./out/x86_64
-            cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
+            mkdir -p ./specialist_staging
+            find bin_output/ -name "*.rpm" -exec mv {} ./specialist_staging/ \;
             rm -rf bin_output/* $HOME/rpmbuild/SPECS/*
           done
       - name: Upload Specialist Artifacts
