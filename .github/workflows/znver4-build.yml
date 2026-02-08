@@ -222,7 +222,11 @@ jobs:
           sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' "$SPEC"
           
           sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
-                    
+
+          # dependencies
+
+          dnf -y install bpftool docbook-style-xsl kernel-devel xen-devel
+          
           mkdir -p bin_output
           rpmbuild -bb "$SPEC" \
             --nocheck \
