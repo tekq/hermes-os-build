@@ -4,11 +4,11 @@ import sys
 
 PACKAGES = [
     "systemd",
-    "zstd", 
-    "xz", 
-    "openssl", 
-    "lz4", 
-    "glibc",
+    #"zstd", 
+    #"xz", 
+    #"openssl", 
+    #"lz4", 
+    #"glibc",
     "binutils",
     "elfutils"
 ]
