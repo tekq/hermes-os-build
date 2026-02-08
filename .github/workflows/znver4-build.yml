@@ -47,7 +47,7 @@ jobs:
             rpm -ivh $pkg-*.src.rpm
             SPEC_FILE=$(find $HOME/rpmbuild/SPECS -name "*.spec" | head -n 1)
             
-            sed -i '1i %global _optflags -O3 -march=znver4 -mtune=znver4 -g' "$SPEC_FILE"
+            sed -i '1i %global optflags -O3 -march=znver4 -mtune=znver4 -g' "$SPEC_FILE"
             
             mkdir -p bin_output
             rpmbuild -bb "$SPEC_FILE" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
@@ -91,22 +91,17 @@ jobs:
             SPEC=$(find $HOME/rpmbuild/SPECS -name "$pkg.spec" | head -n 1)
 
             Z4_FLAGS="-O3 -march=znver4 -mtune=znver4"
+            sed -i "1i %global optflags $Z4_FLAGS -g" "$SPEC"
             
             if [ "$pkg" == "binutils" ]; then
-                # Use Macro-level injection to avoid breaking 'configure' probes
-                sed -i "1i %global build_cflags %{optflags} $Z4_FLAGS" "$SPEC"
-                sed -i "1i %global build_cxxflags %{optflags} $Z4_FLAGS" "$SPEC"
-                
-                # Force binutils to realize it cannot run its own output
                 sed -i 's/native ? 1/native ? 0/g' "$SPEC"
-                sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
+                sed -i 's/-march=x86-64//g' "$SPEC"
+                sed -i 's/-mtune=generic//g' "$SPEC"
             fi
 
-            if [ "$pkg" == "elfutils" ]; then
-                sed -i "1i %global build_cflags %{optflags} $Z4_FLAGS" "$SPEC"
-            fi
-
-            sed -i 's/%check/ %check \n exit 0/g' "$SPEC"
+            # Cleaner check bypass to avoid "exit: too many arguments"
+            sed -i '/^%check/a exit 0' "$SPEC"
+            
             sed -i '1i %global with_doc 0' "$SPEC"
             sed -i '1i %define _nocheck 1' "$SPEC"
 
@@ -179,16 +174,16 @@ jobs:
           SPEC=$(find $HOME/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
 
           Z4_FLAGS="-O3 -march=znver4 -mtune=znver4"
+          sed -i "1i %global optflags $Z4_FLAGS -g" "$SPEC"
           
-          # Overriding build_cflags is safer for Meson than exporting CFLAGS
-          # This allows the 'meson' macro to use standard flags for probing 
-          # but optimized flags for the actual ninja build phase.
-          sed -i "1i %global build_cflags %{optflags} $Z4_FLAGS" "$SPEC"
-          sed -i "1i %global build_cxxflags %{optflags} $Z4_FLAGS" "$SPEC"
+          # More aggressive dependency install for F43 systemd
+          dnf -y install bpftool docbook-style-xsl kernel-devel xen-devel libxslt gperf
           
-          dnf -y install bpftool docbook-style-xsl kernel-devel xen-devel
+          # Bypass checks cleanly
+          sed -i '/^%check/a exit 0' "$SPEC"
 
           mkdir -p bin_output
+          # Use -v to see exactly where Ninja fails if it happens again
           rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
           
           mkdir -p ./out/x86_64
