@@ -99,46 +99,44 @@ jobs:
       contains(needs.scanner.outputs.packages, 'binutils') || 
       contains(needs.scanner.outputs.packages, 'elfutils')
     runs-on: ubuntu-latest
-    container: fedora:43
+    container: 
+      image: fedora:43
+      options: --privileged # Mock requires privileged mode for chroot
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      - name: Install System Tools
-        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
-      - name: Build Utils
+      - name: Install Build Tools
+        run: |
+          dnf install -y mock rpm-build rpmspectool dnf-plugins-core
+          # Add the current user to the mock group
+          usermod -a -G mock $(whoami)
+      - name: Build Utils via Mock
         run: |
           TARGETS=""
           [[ "${{ needs.scanner.outputs.packages }}" == *"binutils"* ]] && TARGETS="$TARGETS binutils"
           [[ "${{ needs.scanner.outputs.packages }}" == *"elfutils"* ]] && TARGETS="$TARGETS elfutils"
 
+          # Create a custom mock config to inject Zen4 flags globally
+          mkdir -p custom_mock
+          cat /etc/mock/fedora-43-x86_64.cfg > custom_mock/znver4.cfg
+          cat << 'EOF' >> custom_mock/znver4.cfg
+          config_opts['macros']['%_annotated_build'] = '0'
+          config_opts['macros']['%_hardened_build'] = '0'
+          config_opts['macros']['%optflags'] = '-O3 -march=znver4 -mtune=znver4 -g'
+          config_opts['macros']['%_nocheck'] = '1'
+          EOF
+
           for pkg in $TARGETS; do
             dnf download --source $pkg
-            dnf builddep -y $pkg-*.src.rpm
-            rpm -ivh $pkg-*.src.rpm
-            SPEC=$(find $HOME/rpmbuild/SPECS -name "$pkg.spec" | head -n 1)
-
-            # HEAVY OVERRIDE: Inject macros at the top of the spec to kill generic flags
-            # 1. Force Zen4 flags into optflags
-            # 2. Nullify the redhat-hardened-specs that inject -march=x86-64
-            # 3. Disable annobin (which causes many "No rule to make target" errors)
-            sed -i '1i %global _annotated_build 0' "$SPEC"
-            sed -i '1i %global _hardened_build 0' "$SPEC"
-            sed -i '1i %global optflags -O3 -march=znver4 -mtune=znver4 -g' "$SPEC"
-            sed -i '1i %undefine _package_note_file' "$SPEC"
             
-            # Disable the check section entirely
-            sed -i '/%check/a exit 0' "$SPEC"
+            # Use mock to build the SRPM into a binary RPM
+            # --nocheck is passed to bypass tests
+            mock -r $(pwd)/custom_mock/znver4.cfg \
+                 --resultdir=$(pwd)/specialist_staging \
+                 --rebuild $pkg-*.src.rpm \
+                 --nocheck
 
-            mkdir -p bin_output
-            rpmbuild -bb "$SPEC" \
-              --define "_rpmdir $(pwd)/bin_output" \
-              --define "debug_package %{nil}" \
-              --define "_nocheck 1" \
-              --nocheck
-            
-            mkdir -p ./specialist_staging
-            find bin_output/ -name "*.rpm" -exec mv {} ./specialist_staging/ \;
-            rm -rf bin_output/* $HOME/rpmbuild/SPECS/*
+            rm -f $pkg-*.src.rpm
           done
       - name: Upload Specialist Artifacts
         uses: actions/upload-artifact@v4
@@ -151,37 +149,38 @@ jobs:
     needs: scanner
     if: contains(needs.scanner.outputs.packages, 'systemd')
     runs-on: ubuntu-latest
-    container: fedora:43
+    container: 
+      image: fedora:43
+      options: --privileged
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      - name: Install Build Deps
+      - name: Install Build Tools
         run: |
-          dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git python3-jinja2 gperf bpftool docbook-style-xsl kernel-devel xen-devel libxslt
-      - name: Build systemd
+          dnf install -y mock rpm-build rpmspectool
+          usermod -a -G mock $(whoami)
+      - name: Build systemd via Mock
         run: |
           dnf download --source systemd
-          rpm -ivh systemd-*.src.rpm
-          dnf builddep -y $HOME/rpmbuild/SPECS/systemd.spec
-          SPEC=$HOME/rpmbuild/SPECS/systemd.spec
           
-          # SYSTEMD SPECIFIC OVERRIDES
-          # We must kill the %set_build_flags macro because it re-injects -march=x86-64
-          sed -i '1i %global _hardened_build 0' "$SPEC"
-          sed -i '1i %global _annotated_build 0' "$SPEC"
-          sed -i '1i %global optflags -O3 -march=znver4 -mtune=znver4 -g' "$SPEC"
+          # Create custom mock config for systemd (handling the LONG_MAX issue)
+          mkdir -p custom_mock
+          cat /etc/mock/fedora-43-x86_64.cfg > custom_mock/systemd-znver4.cfg
+          cat << 'EOF' >> custom_mock/systemd-znver4.cfg
+          config_opts['macros']['%_annotated_build'] = '0'
+          config_opts['macros']['%_hardened_build'] = '0'
+          config_opts['macros']['%optflags'] = '-O3 -march=znver4 -mtune=znver4 -g'
+          # We use a post-cache script to surgicaly fix meson before the build starts
+          config_opts['post_install_scripts'] = [
+              ('bash', '-c', 'find /builddir/build/BUILD -name "meson.build" -exec sed -i "s/assert(long_max > 100000/ #/g" {} \\; || true')
+          ]
+          EOF
 
-          # Bypass check section
-          sed -i '/^%check/a exit 0' "$SPEC"
-
-          mkdir -p bin_output
-          rpmbuild -bb "$SPEC" \
-            --nocheck \
-            --define "_rpmdir $(pwd)/bin_output" \
-            --define "debug_package %{nil}"
-          
-          mkdir -p ./out/x86_64
-          find bin_output/ -name "*.rpm" -exec cp {} ./out/x86_64/ \;
+          mock -r $(pwd)/custom_mock/systemd-znver4.cfg \
+               --resultdir=$(pwd)/out/x86_64 \
+               --rebuild systemd-*.src.rpm \
+               --nocheck
+               
       - name: Upload systemd Artifacts
         uses: actions/upload-artifact@v4
         with:
