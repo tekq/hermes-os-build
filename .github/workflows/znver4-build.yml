@@ -39,7 +39,7 @@ jobs:
         run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git python3
       - name: Build Regular
         run: |
-          PKGS=$(echo "${{ needs.scanner.outputs.packages }}" | tr -d "[]'," | sed -E 's/(glibc|binutils|elfutils)//g')
+          PKGS=$(echo "${{ needs.scanner.outputs.packages }}" | tr -d "[]'," | sed -E 's/(glibc|binutils|elfutils|systemd)//g')
 
           if [ -z "$PKGS" ]; then
             echo "No general packages to build."
@@ -198,6 +198,48 @@ jobs:
         with:
           name: build-glibc
           path: out/x86_64/*.rpm
+          
+  build-systemd:
+    needs: scanner
+    if: contains(needs.scanner.outputs.packages, 'systemd')
+    runs-on: ubuntu-latest
+    container: fedora:43
+    timeout-minutes: 360
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Install System Tools
+        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
+      - name: Build systemd
+        run: |
+          dnf download --source systemd
+          dnf builddep -y systemd-*.src.rpm
+          rpm -ivh systemd-*.src.rpm
+          rm -f systemd-*.src.rpm
+          
+          SPEC=$(find $HOME/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
+          
+          sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' "$SPEC"
+          
+          sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
+                    
+          mkdir -p bin_output
+          rpmbuild -bb "$SPEC" \
+            --nocheck \
+            --define "_rpmdir $(pwd)/bin_output" \
+            --define "debug_package %{nil}" \
+            --define "_annotated_build 0" \
+            --define "_smp_mflags -j$(nproc)"
+          
+          mkdir -p ./out/x86_64 ./out/i686
+          cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
+          cp bin_output/i686/*.rpm ./out/x86_64/ || true
+      - name: Upload systemd Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-systemd
+          path: out/x86_64/*.rpm
+
   deploy:
     needs: [build, build-utils, build-glibc]
     if: always() && (needs.build.result == 'success' || needs.build-utils.result == 'success' || needs.build-glibc.result == 'success')
