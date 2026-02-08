@@ -25,7 +25,7 @@ jobs:
           UPDATES=$(python3 check_updates.py | grep "Triggering build for:" | sed 's/Triggering build for: //')
           echo "packages=$UPDATES" >> $GITHUB_OUTPUT
 
-  # 2. GENERAL BUILDER (Optimized for most packages)
+  # 2. GENERAL BUILDER
   build:
     needs: scanner
     if: needs.scanner.outputs.packages != '' && needs.scanner.outputs.packages != '[]'
@@ -88,32 +88,22 @@ jobs:
             rpm -ivh $pkg-*.src.rpm
             SPEC=$(find $HOME/rpmbuild/SPECS -name "$pkg.spec" | head -n 1)
 
-            # Force Zen4 for both the build system and the resulting code
+            # Global flags for the RPM environment
             sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4 -O3' "$SPEC"
             
             if [ "$pkg" == "binutils" ]; then
-                # Aggressive injection for binutils recursive make
-                sed -i 's/CFLAGS="/CFLAGS="-march=znver4 -O3 /g' "$SPEC"
-                # XCFLAGS and BOOT_CFLAGS are used in binutils multi-stage builds
-                sed -i '/%configure/ i export XCFLAGS="-march=znver4 -O3"\nexport BOOT_CFLAGS="-march=znver4 -O3"' "$SPEC"
+                # Use standard RPM build flags rather than hacking internal Makefiles
+                sed -i '/%configure/ i export CFLAGS="%{optflags}"\nexport CXXFLAGS="%{optflags}"' "$SPEC"
                 sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
                 
-                sed -i '/%build/a run_tests() { :; }' "$SPEC"
+                # Disable tests and docs properly
                 sed -i 's/make check/true/g' "$SPEC"
                 sed -i 's/make -k check/true/g' "$SPEC"
-                sed -i 's/true-gas/true/g' "$SPEC"
-                sed -i 's/true-gold/true/g' "$SPEC"
-                sed -i 's/tar cjf/touch dummy.tar.xz; echo skipping-tar/g' "$SPEC"
-                sed -i 's/uuencode/echo skipping-uuencode/g' "$SPEC"
-                sed -i '1i %global _with_deterministic_archives 1' "$SPEC"
             fi
 
             if [ "$pkg" == "elfutils" ]; then
-                # Elfutils hardcodes some CFLAGS; override here
-                sed -i 's/CFLAGS="/CFLAGS="-march=znver4 -O3 /g' "$SPEC"
-                sed -i '/%configure/ i export CFLAGS_FOR_BUILD="-march=znver4 -O3"' "$SPEC"
+                sed -i '/%configure/ i export CFLAGS="%{optflags}"' "$SPEC"
                 sed -i 's/make check/true/g' "$SPEC"
-                sed -i 's/%{make_build} check/true/g' "$SPEC"
             fi
 
             sed -i '1i %global with_doc 0' "$SPEC"
@@ -156,14 +146,12 @@ jobs:
           sed -i 's/make install/make install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
           sed -i '1i %global with_doc 0' "$SPEC"
           sed -i '1i %global run_glibc_tests 0' "$SPEC"
-          sed -i '1i %global _install_langs en_US:en:C:utf-8:UTF-8' "$SPEC"
 
           mkdir -p bin_output
-          rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0" --define "run_glibc_tests 0" --define "with_doc 0"
+          rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
           
           mkdir -p ./out/x86_64
           cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
-          cp bin_output/i686/*.rpm ./out/x86_64/ || true
       - name: Upload Glibc Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -189,9 +177,12 @@ jobs:
           rpm -ivh systemd-*.src.rpm
           SPEC=$(find $HOME/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
 
+          # Use global optflags injection for systemd/meson
           sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' "$SPEC"
-          sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
-          sed -i 's/CFLAGS="/CFLAGS="-march=znver4 /g' "$SPEC"
+          
+          # Fix: Systemd build often fails if we force CFLAGS manually in a way that conflicts with meson setup
+          # We rely on the global %optflags we injected above which Meson/RPM integration picks up
+          
           dnf -y install bpftool docbook-style-xsl kernel-devel xen-devel
 
           mkdir -p bin_output
@@ -199,7 +190,6 @@ jobs:
           
           mkdir -p ./out/x86_64
           cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
-          cp bin_output/i686/*.rpm ./out/x86_64/ || true
       - name: Upload systemd Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -236,4 +226,4 @@ jobs:
           createrepo_c x86_64/
           
           git add .nojekyll x86_64/
-          git diff-index --quiet HEAD || (git commit -m "Zen4 update: Optimized specialist structure" && git push)
+          git diff-index --quiet HEAD || (git commit -m "Zen4 update: Stable specialist builds" && git push)
