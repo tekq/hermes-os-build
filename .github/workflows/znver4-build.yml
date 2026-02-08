@@ -223,8 +223,9 @@ jobs:
           
           sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
 
-          # dependencies
+          sed -i 's/CFLAGS="/CFLAGS="-march=znver4 /g' "$SPEC"
 
+          # dependencies
           dnf -y install bpftool docbook-style-xsl kernel-devel xen-devel
           
           mkdir -p bin_output
