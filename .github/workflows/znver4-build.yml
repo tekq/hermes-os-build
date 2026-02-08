@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 jobs:
-  # 1. LIGHTWEIGHT SCANNER
+  # 1. SCANNER (Remains same)
   scanner:
     runs-on: ubuntu-latest
     container: fedora:43
@@ -25,7 +25,7 @@ jobs:
           UPDATES=$(python3 check_updates.py | grep "Triggering build for:" | sed 's/Triggering build for: //')
           echo "packages=$UPDATES" >> $GITHUB_OUTPUT
 
-  # 2. GENERAL BUILDER
+  # 2. GENERAL BUILDER (Simpler packages)
   build:
     needs: scanner
     if: needs.scanner.outputs.packages != '' && needs.scanner.outputs.packages != '[]'
@@ -46,12 +46,9 @@ jobs:
             dnf builddep -y $pkg-*.src.rpm
             rpm -ivh $pkg-*.src.rpm
             SPEC_FILE=$(find $HOME/rpmbuild/SPECS -name "*.spec" | head -n 1)
-            
             sed -i '1i %global optflags -O3 -march=znver4 -mtune=znver4 -g' "$SPEC_FILE"
-            
             mkdir -p bin_output
             rpmbuild -bb "$SPEC_FILE" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
-            
             mkdir -p ./staging
             find bin_output/ -name "*.rpm" -exec mv {} ./staging/ \;
             rm -rf bin_output/* $HOME/rpmbuild/SPECS/* $pkg-*.src.rpm
@@ -62,7 +59,7 @@ jobs:
           name: build-general
           path: staging/*.rpm
 
-  # 3. LOW-LEVEL SPECIALISTS (binutils, elfutils)
+  # 3. BINUTILS & ELFUTILS SPECIALIST
   build-utils:
     needs: scanner
     if: |
@@ -70,7 +67,6 @@ jobs:
       contains(needs.scanner.outputs.packages, 'elfutils')
     runs-on: ubuntu-latest
     container: fedora:43
-    timeout-minutes: 360
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -82,31 +78,24 @@ jobs:
           [[ "${{ needs.scanner.outputs.packages }}" == *"binutils"* ]] && TARGETS="$TARGETS binutils"
           [[ "${{ needs.scanner.outputs.packages }}" == *"elfutils"* ]] && TARGETS="$TARGETS elfutils"
 
-          dnf install -y sysprof-capture-devel
-
           for pkg in $TARGETS; do
             dnf download --source $pkg
             dnf builddep -y $pkg-*.src.rpm
             rpm -ivh $pkg-*.src.rpm
             SPEC=$(find $HOME/rpmbuild/SPECS -name "$pkg.spec" | head -n 1)
 
-            Z4_FLAGS="-O3 -march=znver4 -mtune=znver4"
-            sed -i "1i %global optflags $Z4_FLAGS -g" "$SPEC"
+            # Use a more stable way to inject flags for binutils
+            sed -i "1i %global optflags -O3 -march=znver4 -mtune=znver4 -g" "$SPEC"
             
-            if [ "$pkg" == "binutils" ]; then
-                # Fix binutils specifically wanting to run checks/extra logic
-                sed -i 's/native ? 1/native ? 0/g' "$SPEC"
-                sed -i 's/-march=x86-64//g' "$SPEC"
-            fi
-
-            # Clean check bypass
-            sed -i '/^%check/a exit 0' "$SPEC"
+            # Disable problematic parts of the binutils spec that cause "No rule to make target"
+            sed -i 's/%{?_smp_mflags}/-j2/g' "$SPEC"
             
-            sed -i '1i %global with_doc 0' "$SPEC"
+            # Ensure we don't try to run checks that fail in containers
             sed -i '1i %define _nocheck 1' "$SPEC"
+            sed -i '/%check/a exit 0' "$SPEC"
 
             mkdir -p bin_output
-            rpmbuild -bb "$SPEC" --target x86_64 --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
+            rpmbuild -bb "$SPEC" --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
             
             mkdir -p ./specialist_staging
             find bin_output/ -name "*.rpm" -exec mv {} ./specialist_staging/ \;
@@ -118,89 +107,63 @@ jobs:
           name: build-specialists
           path: specialist_staging/*.rpm
 
-  # 4. GLIBC SPECIALIST
-  build-glibc:
-    needs: scanner
-    if: contains(needs.scanner.outputs.packages, 'glibc')
-    runs-on: ubuntu-latest
-    container: fedora:43
-    timeout-minutes: 360
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      - name: Install System Tools
-        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
-      - name: Build Glibc
-        run: |
-          dnf download --source glibc
-          dnf builddep -y glibc-*.src.rpm
-          rpm -ivh glibc-*.src.rpm
-          SPEC=$(find $HOME/rpmbuild/SPECS -name "glibc.spec" | head -n 1)
-
-          sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' "$SPEC"
-          sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
-          sed -i 's/make install/make install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
-          sed -i '1i %global with_doc 0' "$SPEC"
-          sed -i '1i %global run_glibc_tests 0' "$SPEC"
-
-          mkdir -p bin_output
-          rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
-          
-          mkdir -p ./out/x86_64
-          cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
-      - name: Upload Glibc Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-glibc
-          path: out/x86_64/*.rpm
-
-  # 5. SYSTEMD SPECIALIST
+  # 4. SYSTEMD SPECIALIST (Fixed Logic)
   build-systemd:
     needs: scanner
     if: contains(needs.scanner.outputs.packages, 'systemd')
     runs-on: ubuntu-latest
     container: fedora:43
-    timeout-minutes: 360
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      - name: Install System Tools
-        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git python3-jinja2 gperf
+      - name: Install Build Deps
+        run: |
+          dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git python3-jinja2 gperf bpftool docbook-style-xsl kernel-devel xen-devel libxslt
       - name: Build systemd
         run: |
           dnf download --source systemd
-          dnf builddep -y systemd-*.src.rpm
           rpm -ivh systemd-*.src.rpm
-          SPEC=$(find $HOME/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
-
-          Z4_FLAGS="-O3 -march=znver4 -mtune=znver4"
-          sed -i "1i %global optflags $Z4_FLAGS -g" "$SPEC"
+          dnf builddep -y $HOME/rpmbuild/SPECS/systemd.spec
           
-          # Dependencies
-          dnf -y install bpftool docbook-style-xsl kernel-devel xen-devel libxslt gperf
+          SPEC=$HOME/rpmbuild/SPECS/systemd.spec
           
-          # Correctly patch the spec to remove the LONG_MAX check during the %prep stage
-          # We append the sed command to the end of the %prep section in the spec file
-          sed -i '/%prep/a find . -name "meson.build" -exec sed -i "s/assert(long_max > 100000/ # assert(long_max > 100000/g" {} \\;' "$SPEC"
+          # Inject Zen4 flags
+          sed -i "1i %global optflags -O3 -march=znver4 -mtune=znver4 -g" "$SPEC"
 
-          # Bypass checks
+          # INSTEAD OF SED: Create a proper patch file for the meson check
+          cat << 'EOF' > $HOME/rpmbuild/SOURCES/fix-meson-check.patch
+          --- a/meson.build
+          +++ b/meson.build
+          @@ -568,7 +568,6 @@
+           endif
+           
+          -assert(long_max > 100000, 'long_max > 100000')
+          +message('Skipping long_max check for Znver4 build')
+          EOF
+
+          # Add the patch to the spec file properly
+          sed -i '/Source0:/a Patch1000: fix-meson-check.patch' "$SPEC"
+          # Apply it in %prep (standard RPM way)
+          sed -i '/%prep/a %patch -P 1000 -p1' "$SPEC"
+
+          # Bypass check section
           sed -i '/^%check/a exit 0' "$SPEC"
 
           mkdir -p bin_output
           rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
           
           mkdir -p ./out/x86_64
-          cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
+          find bin_output/ -name "*.rpm" -exec cp {} ./out/x86_64/ \;
       - name: Upload systemd Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-systemd
           path: out/x86_64/*.rpm
 
-  # 6. DEPLOYMENT
+  # 5. DEPLOYMENT (Remains same)
   deploy:
-    needs: [build, build-utils, build-glibc, build-systemd]
-    if: always() && (needs.build.result == 'success' || needs.build-utils.result == 'success' || needs.build-glibc.result == 'success' || needs.build-systemd.result == 'success')
+    needs: [build, build-utils, build-systemd]
+    if: always() && (needs.build.result == 'success' || needs.build-utils.result == 'success' || needs.build-systemd.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repo
@@ -217,14 +180,10 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          
           sudo apt-get update && sudo apt-get install -y createrepo-c
-          
           mkdir -p x86_64
           mv -f incoming_rpms/*.rpm x86_64/ 2>/dev/null || true
-          
           touch .nojekyll
           createrepo_c x86_64/
-          
           git add .nojekyll x86_64/
-          git diff-index --quiet HEAD || (git commit -m "Zen4 update: Fixed specialist spec patches" && git push)
+          git diff-index --quiet HEAD || (git commit -m "Zen4 update: Surgical spec patching" && git push)
