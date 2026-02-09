@@ -49,7 +49,7 @@ jobs:
             dnf builddep -y $pkg-*.src.rpm
             mkdir -p bin_output
             rpm -ivh $pkg-*.src.rpm
-            sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' ~/rpmbuild/SPECS/*.spec
+            sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin' ~/rpmbuild/SPECS/*.spec
             rpmbuild -bb ~/rpmbuild/SPECS/*.spec \
               --nocheck \
               --define "_rpmdir $(pwd)/bin_output" \
@@ -82,7 +82,7 @@ jobs:
           rpm -ivh glibc-*.src.rpm
           SPEC=$(find $HOME/rpmbuild/SPECS -name "glibc.spec" | head -n 1)
 
-          sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' "$SPEC"
+          sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin' "$SPEC"
           sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
           sed -i 's/make install/make install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
           sed -i '1i %global with_doc 0' "$SPEC"
@@ -128,10 +128,10 @@ jobs:
           cat << 'EOF' >> custom_mock/znver4.cfg
           config_opts['macros']['%_annotated_build'] = '0'
           config_opts['macros']['%_hardened_build'] = '0'
-          config_opts['macros']['%optflags'] = '-O3 -march=znver4 -mtune=znver4 -g'
+          config_opts['macros']['%optflags'] = '-O3 -march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -g'
           config_opts['macros']['%_nocheck'] = '1'
-          config_opts['macros']['%_distro_extra_cflags'] = '-march=znver4 -mtune=znver4 -O3'
-          config_opts['macros']['%_distro_extra_cxxflags'] = '-march=znver4 -mtune=znver4 -O3'
+          config_opts['macros']['%_distro_extra_cflags'] = '-march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -O3'
+          config_opts['macros']['%_distro_extra_cxxflags'] = '-march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -O3'
           EOF
 
           for pkg in $TARGETS; do
@@ -177,9 +177,9 @@ jobs:
           cat << 'EOF' >> custom_mock/systemd-znver4.cfg
           config_opts['macros']['%_annotated_build'] = '0'
           config_opts['macros']['%_hardened_build'] = '0'
-          config_opts['macros']['%optflags'] = '-O3 -march=znver4 -mtune=znver4 -g'
-          config_opts['macros']['%_distro_extra_cflags'] = '-march=znver4 -mtune=znver4 -O3'
-          config_opts['macros']['%_distro_extra_cxxflags'] = '-march=znver4 -mtune=znver4 -O3'
+          config_opts['macros']['%optflags'] = '-O3 -march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -g'
+          config_opts['macros']['%_distro_extra_cflags'] = '-march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -O3'
+          config_opts['macros']['%_distro_extra_cxxflags'] = '-march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -O3'
           # We use a post-cache script to surgicaly fix meson before the build starts
           config_opts['post_install_scripts'] = [
               ('bash', '-c', 'find /builddir/build/BUILD -name "meson.build" -exec sed -i "s/assert(long_max > 100000/ #/g" {} \\; || true')
