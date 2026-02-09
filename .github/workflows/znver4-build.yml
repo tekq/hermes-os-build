@@ -36,28 +36,34 @@ jobs:
         uses: actions/checkout@v4
       - name: Install System Tools
         run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git python3
-      - name: Build Loop
+      - name: Build Simple
         run: |
-          PKGS=$(echo "${{ needs.scanner.outputs.packages }}" | tr -d "[]'," | sed -E 's/(glibc|binutils|elfutils|systemd)//g')
-          if [ -z "$PKGS" ]; then exit 0; fi
-
+          PKGS=$(echo "${{ needs.scanner.outputs.packages }}" | tr -d "[]'," | sed -E 's/(glibc|binutils|elfutils|systemd)//g') 
+          if [ -z "$PKGS" ]; then
+            echo "No general packages to build."
+            exit 0
+          fi
           for pkg in $PKGS; do
+            echo "--- Processing $pkg ---"
             dnf download --source $pkg
             dnf builddep -y $pkg-*.src.rpm
-            rpm -ivh $pkg-*.src.rpm
-            SPEC_FILE=$(find $HOME/rpmbuild/SPECS -name "*.spec" | head -n 1)
-            sed -i '1i %global optflags -O3 -march=znver4 -mtune=znver4 -g' "$SPEC_FILE"
             mkdir -p bin_output
-            rpmbuild -bb "$SPEC_FILE" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
-            mkdir -p ./staging
-            find bin_output/ -name "*.rpm" -exec mv {} ./staging/ \;
-            rm -rf bin_output/* $HOME/rpmbuild/SPECS/* $pkg-*.src.rpm
+            rpm -ivh $pkg-*.src.rpm
+            sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4' ~/rpmbuild/SPECS/*.spec
+            rpmbuild -bb ~/rpmbuild/SPECS/*.spec \
+              --nocheck \
+              --define "_rpmdir $(pwd)/bin_output" \
+              --define "debug_package %{nil}" \
+              --define "_annotated_build 0"
+            mkdir -p ./x86_64/
+            cp bin_output/x86_64/*.rpm ./x86_64/
+            rm -rf bin_output/* ~/rpmbuild/SPECS/* $pkg-*.src.rpm
           done
       - name: Upload General Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-general
-          path: staging/*.rpm
+          path: x86_64/*.rpm
   build-glibc:
     needs: scanner
     if: contains(needs.scanner.outputs.packages, 'glibc')
