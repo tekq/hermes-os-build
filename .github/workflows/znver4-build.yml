@@ -153,7 +153,7 @@ jobs:
           path: specialist_staging/*.rpm
 
   # 4. SYSTEMD SPECIALIST
-build-systemd:
+  build-systemd:
     needs: scanner
     runs-on: ubuntu-latest
     # Remove 'container: fedora:43' from here
