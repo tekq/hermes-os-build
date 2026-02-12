@@ -199,7 +199,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-systemd
-          path: out/x86_64/*.rpm  deploy:
+          path: out/x86_64/*.rpm  
+  deploy:
     needs: [build, build-utils, build-systemd, build-glibc]
     if: always() && (needs.build.result == 'success' || needs.build-glibc.result == 'success' || needs.build-utils.result == 'success' || needs.build-systemd.result == 'success')
     runs-on: ubuntu-latest
