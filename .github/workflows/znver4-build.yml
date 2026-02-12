@@ -166,7 +166,7 @@ jobs:
           platforms: all
 
       - name: Build in Fedora Container
-        uses: maus007/docker-run-action-fork@v3
+        uses: maus007/docker-run-action-fork@v1
         with:
           image: fedora:43
           options: -v ${{ github.workspace }}:/workspace --privileged
