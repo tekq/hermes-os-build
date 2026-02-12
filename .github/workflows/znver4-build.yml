@@ -157,41 +157,30 @@ jobs:
     needs: scanner
     if: contains(needs.scanner.outputs.packages, 'systemd')
     runs-on: ubuntu-latest
-    container: 
-      image: fedora:43
-      options: --privileged
+    container: fedora:43
+    timeout-minutes: 360
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      - name: Install Build Tools
-        run: |
-          dnf install -y mock rpm-build rpmspectool
-          usermod -a -G mock $(whoami)
-      - name: Build systemd via Mock
+      - name: Install System Tools
+        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
+      - name: Build systemd
         run: |
           dnf download --source systemd
-          
-          # Create custom mock config for systemd (handling the LONG_MAX issue)
-          mkdir -p custom_mock
-          cat /etc/mock/fedora-43-x86_64.cfg > custom_mock/systemd-znver4.cfg
-          cat << 'EOF' >> custom_mock/systemd-znver4.cfg
-          config_opts['macros']['%_annotated_build'] = '0'
-          config_opts['macros']['%_hardened_build'] = '0'
-          config_opts['macros']['%optflags'] = '-O3 -march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -g'
-          config_opts['macros']['%_distro_extra_cflags'] = '-march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -O3'
-          config_opts['macros']['%_distro_extra_cxxflags'] = '-march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -O3'
-          # We use a post-cache script to surgicaly fix meson before the build starts
-          config_opts['post_install_scripts'] = [
-              ('bash', '-c', 'find /builddir/build/BUILD -name "meson.build" -exec sed -i "s/assert(long_max > 100000/ #/g" {} \\; || true')
-          ]
-          EOF
+          dnf builddep -y systemd-*.src.rpm
+          rpm -ivh systemd-*.src.rpm
+          SPEC=$(find $HOME/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
 
-          mock -r $(pwd)/custom_mock/systemd-znver4.cfg \
-               --resultdir=$(pwd)/out/x86_64 \
-               --rebuild systemd-*.src.rpm \
-               --nocheck
-               
-      - name: Upload systemd Artifacts
+          curl https://raw.githubusercontent.com/tekq/fhp-build/refs/heads/main/systemd-patches.diff > znver4.diff
+
+          patch "$SPEC" < znver4.diff 
+
+          mkdir -p bin_output
+          rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}"
+          
+          mkdir -p ./out/x86_64
+          cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
+      - name: Upload Glibc Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-systemd
