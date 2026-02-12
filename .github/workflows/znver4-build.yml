@@ -153,49 +153,52 @@ jobs:
           path: specialist_staging/*.rpm
 
   # 4. SYSTEMD SPECIALIST
-  build-systemd:
+build-systemd:
     needs: scanner
-    if: contains(needs.scanner.outputs.packages, 'systemd')
     runs-on: ubuntu-latest
-    container: fedora:43
-    timeout-minutes: 360
+    # Remove 'container: fedora:43' from here
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      - name: Install System Tools
-        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
-      - name: Set up QEMU
+
+      - name: Set up QEMU (On Ubuntu Host)
         uses: docker/setup-qemu-action@v3
         with:
           platforms: all
-      - name: Build systemd
-        run: |
-          dnf install -y qemu-user-static
-          
-          dnf download --source systemd
-          dnf builddep -y systemd-*.src.rpm
 
-          dnf -y in bpftool docbook-style-xsl kernel-devel xen-devel
-          
-          rpm -ivh systemd-*.src.rpm
-          SPEC=$(find $HOME/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
+      - name: Build in Fedora Container
+        uses: addnab/docker-run-action@v3
+        with:
+          image: fedora:43
+          options: -v ${{ github.workspace }}:/workspace
+          run: |
+            cd /workspace
+            dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git qemu-user-static patch curl
+            
+            # Download and setup
+            dnf download --source systemd
+            dnf builddep -y systemd-*.src.rpm
+            dnf -y in bpftool docbook-style-xsl kernel-devel xen-devel
+            
+            rpm -ivh systemd-*.src.rpm
+            SPEC=$(find $HOME/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
 
-          curl https://raw.githubusercontent.com/tekq/fhp-build/refs/heads/main/systemd-patches.diff > znver4.diff
+            # Apply your znver4 patch
+            curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/systemd-patches.diff > znver4.diff
+            patch "$SPEC" < znver4.diff 
 
-          patch "$SPEC" < znver4.diff 
+            # Build
+            mkdir -p bin_output
+            rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir /workspace/bin_output" --define "debug_package %{nil}"
+            
+            mkdir -p /workspace/out/x86_64
+            cp /workspace/bin_output/x86_64/*.rpm /workspace/out/x86_64/ || true
 
-          mkdir -p bin_output
-          rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}"
-          
-          mkdir -p ./out/x86_64
-          cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
-      - name: Upload Glibc Artifacts
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-systemd
-          path: out/x86_64/*.rpm
-
-  # 5. DEPLOYMENT (Remains same)
+          path: out/x86_64/*.rpm  # 5. DEPLOYMENT (Remains same)
   deploy:
     needs: [build, build-utils, build-systemd, build-glibc]
     if: always() && (needs.build.result == 'success' || needs.build-glibc.result == 'success' || needs.build-utils.result == 'success' || needs.build-systemd.result == 'success')
