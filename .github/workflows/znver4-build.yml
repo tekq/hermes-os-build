@@ -169,38 +169,45 @@ jobs:
         uses: addnab/docker-run-action@v3
         with:
           image: fedora:43
-          options: -v ${{ github.workspace }}:/workspace
+          options: -v ${{ github.workspace }}:/workspace --privileged
           run: |
-            # 1. Install QEMU static binaries INSIDE the container 
-            # This is the 'bridge' the kernel uses to run Zen 4 code here
+            cd /workspace
+            # 1. Install dependencies and QEMU
             dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git qemu-user-static patch curl
             
-            # 2. Setup Build Environment
+            # 2. Setup local RPM tree to ensure files stay in /workspace
+            mkdir -p /workspace/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+            
+            # 3. Get Source
             dnf download --source systemd
             dnf builddep -y systemd-*.src.rpm
             dnf -y in bpftool docbook-style-xsl kernel-devel xen-devel
             
-            rpm -ivh systemd-*.src.rpm
-            SPEC=$(find $HOME/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
-
-            # 3. Apply your Patch
+            # Install SRPM into our workspace
+            rpm -ivh systemd-*.src.rpm --define "_topdir /workspace/rpmbuild"
+            
+            # 4. Apply Patch
+            SPEC=$(find /workspace/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
             curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/systemd-patches.diff > znver4.diff
             patch "$SPEC" < znver4.diff 
 
-            # 4. Build
-            mkdir -p bin_output
-            # QEMU now transparently handles Zen 4 binaries during the Meson setup
-            rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir /workspace/bin_output" --define "debug_package %{nil}"
-            
+            # 5. Build
+            # We use -bc first to see exactly where it fails if it does
+            rpmbuild -bb "$SPEC" \
+              --nocheck \
+              --define "_topdir /workspace/rpmbuild" \
+              --define "debug_package %{nil}" \
+              --define "_smp_mflags -j2"
+
+            # 6. Collect Artifacts
             mkdir -p /workspace/out/x86_64
-            cp /workspace/bin_output/x86_64/*.rpm /workspace/out/x86_64/ || true
+            find /workspace/rpmbuild/RPMS/x86_64/ -name "*.rpm" -exec cp {} /workspace/out/x86_64/ \;
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-systemd
-          path: out/x86_64/*.rpm  
-  deploy:
+          path: out/x86_64/*.rpm  deploy:
     needs: [build, build-utils, build-systemd, build-glibc]
     if: always() && (needs.build.result == 'success' || needs.build-glibc.result == 'success' || needs.build-utils.result == 'success' || needs.build-systemd.result == 'success')
     runs-on: ubuntu-latest
