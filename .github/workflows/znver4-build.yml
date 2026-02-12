@@ -160,14 +160,32 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Upgrade Docker Engine (Host)
+        run: |
+          # Add Docker's official GPG key:
+          sudo apt update
+          sudo apt install -y ca-certificates curl
+          sudo install -m 0755 -d /etc/apt/keyrings
+          sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+          sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+          # Add the repository to Apt sources:
+          echo \
+            "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+            $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+            sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          
+          sudo apt update
+          # Upgrade to the latest stable Docker/Containerd
+          sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+          # Restart to ensure the new engine is active
+          sudo systemctl restart docker
+
       - name: Set up QEMU (Host Side)
         uses: docker/setup-qemu-action@v3
         with:
           platforms: all
-      - name: Upgrade Docker
-        run: |
-          sudo apt-get update
-          sudo apt-get install --only-upgrade docker-ce docker-ce-cli containerd.io
+
       - name: Build in Fedora Container
         uses: addnab/docker-run-action@v3
         with:
@@ -175,9 +193,8 @@ jobs:
           options: -v ${{ github.workspace }}:/workspace --privileged
           run: |
             cd /workspace
-            # 1. Install dependencies and QEMU
-            dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git qemu-user-static patch curl
-            
+            # Now the modern Docker engine will properly pull the Fedora 43 image
+            dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git qemu-user-static patch curl            
             # 2. Setup local RPM tree to ensure files stay in /workspace
             mkdir -p /workspace/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
             
