@@ -191,7 +191,6 @@ jobs:
         with:
           image: fedora:43
           options: -v ${{ github.workspace }}:/workspace --privileged
-          # Force a clean bash execution to ignore the action's weird formatting
           run: |
             set -e
             dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git qemu-user-static patch curl
@@ -201,27 +200,24 @@ jobs:
             dnf -y in bpftool docbook-style-xsl kernel-devel xen-devel
             rpm -ivh systemd-*.src.rpm --define "_topdir /workspace/rpmbuild"
             SPEC=$(find /workspace/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
-            curl -L https://raw.githubusercontent.com/tekq/fhp-build-experimental/refs/heads/main/systemd-patches.diff?token=GHSAT0AAAAAADU657YBHDOG7GMHDL2QBWD22MOI7UA > /workspace/znver4.diff
-            patch "$SPEC" < /workspace/znver4.diff
-            sed -i 's/%{_bindir}\/systemd-analyze verify/#/' "$SPEC"
+            curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/systemd-patches.diff > /workspace/znver4.diff
+            patch "$SPEC" < /workspace/znver4.diff 
             sed -i 's/systemd-hwdb update/true/' "$SPEC"
-            sed -i 's/-Dman=true/-Dman=false/' "$SPEC"
+            sed -i 's/%{_bindir}\/systemd-analyze verify/true/' "$SPEC"
             rpmbuild -bb "$SPEC" \
               --nocheck \
               --define "_topdir /workspace/rpmbuild" \
               --define "debug_package %{nil}" \
               --define "_smp_mflags -j2" \
-              --define "run_tests 0" \
               --define "bootstrap 1" \
+              --define "run_tests 0" \
               --define "_validate_unit_files 0" \
-              --define "make_check 0"            
-            mkdir -p /workspace/out/x86_64
-            find /workspace/rpmbuild/RPMS/x86_64/ -name "*.rpm" -exec cp {} /workspace/out/x86_64/ +
+              --define "__spec_install_post /usr/lib/rpm/brp-compress"      
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-systemd
-          path: out/x86_64/*.rpm          
+          uses: actions/upload-artifact@v4
+          with:
+            name: build-systemd
+            path: out/x86_64/*.rpm          
   deploy:
     needs: [build, build-utils, build-systemd, build-glibc]
     if: always() && (needs.build.result == 'success' || needs.build-glibc.result == 'success' || needs.build-utils.result == 'success' || needs.build-systemd.result == 'success')
