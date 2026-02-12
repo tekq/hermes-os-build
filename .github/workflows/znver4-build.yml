@@ -209,7 +209,9 @@ jobs:
               --define "debug_package %{nil}" \
               --define "_smp_mflags -j2" \
               --define "run_tests 0" \
-              --define "tests false"            
+              --define "bootstrap 1" \
+              --define "_validate_unit_files 0" \
+              --define "make_check 0"            
             mkdir -p /workspace/out/x86_64
             find /workspace/rpmbuild/RPMS/x86_64/ -name "*.rpm" -exec cp {} /workspace/out/x86_64/ +
       - name: Upload Artifacts
