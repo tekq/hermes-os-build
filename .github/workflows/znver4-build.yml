@@ -156,12 +156,11 @@ jobs:
   build-systemd:
     needs: scanner
     runs-on: ubuntu-latest
-    # Remove 'container: fedora:43' from here
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (On Ubuntu Host)
+      - name: Set up QEMU (Host Side)
         uses: docker/setup-qemu-action@v3
         with:
           platforms: all
@@ -172,10 +171,11 @@ jobs:
           image: fedora:43
           options: -v ${{ github.workspace }}:/workspace
           run: |
-            cd /workspace
+            # 1. Install QEMU static binaries INSIDE the container 
+            # This is the 'bridge' the kernel uses to run Zen 4 code here
             dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git qemu-user-static patch curl
             
-            # Download and setup
+            # 2. Setup Build Environment
             dnf download --source systemd
             dnf builddep -y systemd-*.src.rpm
             dnf -y in bpftool docbook-style-xsl kernel-devel xen-devel
@@ -183,12 +183,13 @@ jobs:
             rpm -ivh systemd-*.src.rpm
             SPEC=$(find $HOME/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
 
-            # Apply your znver4 patch
+            # 3. Apply your Patch
             curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/systemd-patches.diff > znver4.diff
             patch "$SPEC" < znver4.diff 
 
-            # Build
+            # 4. Build
             mkdir -p bin_output
+            # QEMU now transparently handles Zen 4 binaries during the Meson setup
             rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir /workspace/bin_output" --define "debug_package %{nil}"
             
             mkdir -p /workspace/out/x86_64
@@ -198,8 +199,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-systemd
-          path: out/x86_64/*.rpm  # 5. DEPLOYMENT (Remains same)
-  deploy:
+          path: out/x86_64/*.rpm  deploy:
     needs: [build, build-utils, build-systemd, build-glibc]
     if: always() && (needs.build.result == 'success' || needs.build-glibc.result == 'success' || needs.build-utils.result == 'success' || needs.build-systemd.result == 'success')
     runs-on: ubuntu-latest
