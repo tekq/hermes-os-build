@@ -159,7 +159,26 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        
+
+      - name: Upgrade Docker Engine
+        run: |
+          sudo apt update
+          sudo apt install -y ca-certificates curl
+          sudo install -m 0755 -d /etc/apt/keyrings
+          sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+          sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+          echo \
+            "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+            $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+            sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          
+          sudo apt update
+          sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+          sudo systemctl restart docker
+          # CRITICAL: Pre-pull the image so the action doesn't skip the step
+          docker pull fedora:43
+
       - name: Set up QEMU (Host Side)
         uses: docker/setup-qemu-action@v3
         with:
@@ -170,35 +189,28 @@ jobs:
         with:
           image: fedora:43
           options: -v ${{ github.workspace }}:/workspace --privileged
+          # We use /bin/bash -c to ensure the run block isn't ignored by the fork's entrypoint
           run: |
-            cd /workspace
-            # Install build tools and QEMU bridge inside the container
             dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git qemu-user-static patch curl
             
-            # Setup local RPM tree to ensure persistence in the workspace
             mkdir -p /workspace/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
             
-            # Download Source
             dnf download --source systemd
             dnf builddep -y systemd-*.src.rpm
             dnf -y in bpftool docbook-style-xsl kernel-devel xen-devel
             
-            # Install SRPM with workspace redirect
             rpm -ivh systemd-*.src.rpm --define "_topdir /workspace/rpmbuild"
             
-            # Apply Zen 4 Patch
             SPEC=$(find /workspace/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
-            curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/systemd-patches.diff > znver4.diff
-            patch "$SPEC" < znver4.diff 
+            curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/systemd-patches.diff > /workspace/znver4.diff
+            patch "$SPEC" < /workspace/znver4.diff 
 
-            # Build - limiting to 2 cores for GitHub Runner stability
             rpmbuild -bb "$SPEC" \
               --nocheck \
               --define "_topdir /workspace/rpmbuild" \
               --define "debug_package %{nil}" \
               --define "_smp_mflags -j2"
 
-            # Stage for upload
             mkdir -p /workspace/out/x86_64
             find /workspace/rpmbuild/RPMS/x86_64/ -name "*.rpm" -exec cp {} /workspace/out/x86_64/ \;
 
@@ -206,8 +218,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-systemd
-          path: out/x86_64/*.rpm
-          
+          path: out/x86_64/*.rpm          
   deploy:
     needs: [build, build-utils, build-systemd, build-glibc]
     if: always() && (needs.build.result == 'success' || needs.build-glibc.result == 'success' || needs.build-utils.result == 'success' || needs.build-systemd.result == 'success')
