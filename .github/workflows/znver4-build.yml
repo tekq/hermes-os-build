@@ -168,6 +168,9 @@ jobs:
         run: |
           dnf download --source systemd
           dnf builddep -y systemd-*.src.rpm
+
+          dnf -y in bpftool docbook-style-xsl kernel-devel xen-devel
+          
           rpm -ivh systemd-*.src.rpm
           SPEC=$(find $HOME/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
 
