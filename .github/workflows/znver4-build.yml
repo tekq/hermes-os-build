@@ -189,8 +189,9 @@ jobs:
         with:
           image: fedora:43
           options: -v ${{ github.workspace }}:/workspace --privileged
-          # We use /bin/bash -c to ensure the run block isn't ignored by the fork's entrypoint
+          # Force a clean bash execution to ignore the action's weird formatting
           run: |
+            set -e
             dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git qemu-user-static patch curl
             
             mkdir -p /workspace/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
@@ -212,8 +213,8 @@ jobs:
               --define "_smp_mflags -j2"
 
             mkdir -p /workspace/out/x86_64
-            find /workspace/rpmbuild/RPMS/x86_64/ -name "*.rpm" -exec cp {} /workspace/out/x86_64/ \;
-
+            find /workspace/rpmbuild/RPMS/x86_64/ -name "*.rpm" -exec cp {} /workspace/out/x86_64/ +
+            
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
