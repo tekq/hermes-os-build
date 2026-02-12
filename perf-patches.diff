@@ -1,0 +1,22 @@
+0a1,11
+> %global zen4_flags -march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin
+> 
+> %global _optflags %{optflags} %{zen4_flags}
+> %global build_cflags %{optflags}
+> %global build_cxxflags %{optflags}
+> %global build_fflags %{optflags}
+> %global build_fcflags %{optflags}
+> 
+> %undefine _package_note_file
+> %undefine _annotated_build
+> 
+806a818,823
+> export CFLAGS="%{optflags}"
+> export CXXFLAGS="%{optflags}"
+> export FFLAGS="%{optflags}"
+> export FCFLAGS="%{optflags}"
+> export LDFLAGS="-Wl,-z,relro -Wl,-z,now"
+> 
+840a858,859
+> 	-Dc_args="-march=znver4 -mtune=znver4 -O3"
+>     	-Dcpp_args="-march=znver4 -mtune=znver4 -O3"
