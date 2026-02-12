@@ -183,7 +183,9 @@ jobs:
         uses: docker/setup-qemu-action@v3
         with:
           platforms: all
-
+        env:
+          QEMU_CPU: max
+          
       - name: Build in Fedora Container
         uses: maus007/docker-run-action-fork@v1
         with:
