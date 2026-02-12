@@ -203,7 +203,6 @@ jobs:
             SPEC=$(find /workspace/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
             curl -L https://raw.githubusercontent.com/tekq/fhp-build-experimental/refs/heads/main/systemd-patches.diff?token=GHSAT0AAAAAADU657YBHDOG7GMHDL2QBWD22MOI7UA > /workspace/znver4.diff
             patch "$SPEC" < /workspace/znver4.diff
-            # 1. Disable unit file validation (runs systemd-analyze)
             sed -i 's/%{_bindir}\/systemd-analyze verify/#/' "$SPEC"
             sed -i 's/systemd-hwdb update/true/' "$SPEC"
             sed -i 's/-Dman=true/-Dman=false/' "$SPEC"
