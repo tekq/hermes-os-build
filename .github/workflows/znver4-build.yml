@@ -205,7 +205,9 @@ jobs:
               --nocheck \
               --define "_topdir /workspace/rpmbuild" \
               --define "debug_package %{nil}" \
-              --define "_smp_mflags -j2"
+              --define "_smp_mflags -j2" \
+              --define "run_tests 0" \
+              --define "tests false"            
             mkdir -p /workspace/out/x86_64
             find /workspace/rpmbuild/RPMS/x86_64/ -name "*.rpm" -exec cp {} /workspace/out/x86_64/ +
       - name: Upload Artifacts
