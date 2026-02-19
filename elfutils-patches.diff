@@ -1,0 +1,8 @@
+322d321
+< ZNVER4_FLAGS="-march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3"
+324d322
+< CXXFLAGS="$CXXFLAGS $ZNVER4_FLAGS"
+330c328
+< %configure CFLAGS="$RPM_OPT_FLAGS $ZNVER4_FLAGS" \
+---
+> %configure CFLAGS="$RPM_OPT_FLAGS" \
