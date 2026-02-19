@@ -124,6 +124,10 @@ jobs:
             dnf download --source $pkg
             dnf builddep -y $pkg-*.src.rpm
 
+            if [[ $pkg -eq "elfutils" ]]; then
+              dnf -y in sysprof-capture-devel
+            fi
+            
             rpm -ivh $pkg-*.src.rpm
             SPEC=$(find ~/rpmbuild/SPECS -name "${pkg}.spec" | head -n 1)
 
