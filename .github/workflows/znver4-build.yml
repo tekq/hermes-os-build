@@ -152,72 +152,40 @@ jobs:
           name: build-specialists
           path: specialist_staging/*.rpm
 
-  # 4. SYSTEMD SPECIALIST
   build-systemd:
     needs: scanner
+    if: contains(needs.scanner.outputs.packages, 'glibc')
     runs-on: ubuntu-latest
+    container: fedora:43
+    timeout-minutes: 360
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      - name: Upgrade Docker Engine
+      - name: Install System Tools
+        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
+      - name: Build systemd
         run: |
-          sudo apt update
-          sudo apt install -y ca-certificates curl
-          sudo install -m 0755 -d /etc/apt/keyrings
-          sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
-          sudo chmod a+r /etc/apt/keyrings/docker.asc
-
-          echo \
-            "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
-            $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-            sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+          dnf download --source systemd
+          dnf builddep -y systemd-*.src.rpm
           
-          sudo apt update
-          sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
-          sudo systemctl restart docker
-          # CRITICAL: Pre-pull the image so the action doesn't skip the step
-          docker pull fedora:43
-
-      - name: Set up QEMU (Host Side)
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
-        env:
-          QEMU_CPU: max
+          dnf -y in bpftool docbook-style-xsl kernel-devel xen-devel
+          rpm -ivh systemd-*.src.rpm --define "_topdir /workspace/rpmbuild"
           
-      - name: Build in Fedora Container
-        uses: maus007/docker-run-action-fork@v1
-        with:
-          image: fedora:43
-          options: -v ${{ github.workspace }}:/workspace --privileged
-          run: |
-            set -e
-            dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git qemu-user-static patch curl
-            mkdir -p /workspace/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-            dnf download --source systemd
-            dnf builddep -y systemd-*.src.rpm
-            dnf -y in bpftool docbook-style-xsl kernel-devel xen-devel
-            rpm -ivh systemd-*.src.rpm --define "_topdir /workspace/rpmbuild"
-            SPEC=$(find /workspace/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
-            curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/systemd-patches.diff > /workspace/znver4.diff
-            patch "$SPEC" < /workspace/znver4.diff 
-            sed -i 's/systemd-hwdb update/true/' "$SPEC"
-            sed -i 's/%{_bindir}\/systemd-analyze verify/true/' "$SPEC"
-            rpmbuild -bb "$SPEC" \
-              --nocheck \
-              --define "_topdir /workspace/rpmbuild" \
-              --define "debug_package %{nil}" \
-              --define "_smp_mflags -j2" \
-              --define "bootstrap 1" \
-              --define "run_tests 0" \
-              --define "_validate_unit_files 0" \
-              --define "__spec_install_post /usr/lib/rpm/brp-compress"      
-      - name: Upload Artifacts
+          SPEC=$(find /workspace/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
+          
+          curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/systemd-patches.diff > /workspace/znver4.diff
+          patch "$SPEC" < /workspace/znver4.diff 
+
+          mkdir -p bin_output
+          rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
+          
+          mkdir -p ./out/x86_64
+          cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
+      - name: Upload systemd Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-systemd
-          path: out/x86_64/*.rpm          
+          path: out/x86_64/*.rpm
   deploy:
     needs: [build, build-utils, build-systemd, build-glibc]
     if: always() && (needs.build.result == 'success' || needs.build-glibc.result == 'success' || needs.build-utils.result == 'success' || needs.build-systemd.result == 'success')
@@ -243,4 +211,4 @@ jobs:
           touch .nojekyll
           createrepo_c x86_64/
           git add .nojekyll x86_64/
-          git diff-index --quiet HEAD || (git commit -m "Zen4 update: Low-profile cross-compile" && git push)
+          git diff-index --quiet HEAD || (git commit -m "update" && git push)
