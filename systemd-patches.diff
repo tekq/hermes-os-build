@@ -1,5 +1,5 @@
 0a1,14
-> %global zen4_flags -march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin
+> %global zen4_flags -march=x86-64-v3 -mtune=x86-64-v3 -mprefer-vector-width=512 -O3 -flto=thin
 > 
 > %global _optflags %{optflags} %{zen4_flags}
 > %global build_cflags %{optflags}
