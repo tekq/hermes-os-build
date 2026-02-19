@@ -10,7 +10,7 @@ PACKAGES = [
     #"glibc",
     #"systemd",
     ### BORKED
-    "binutils",
+    # "binutils",
     "elfutils"
 ]
 MY_REPO_URL = "https://tekq.github.io/fhp-build/x86_64/"
