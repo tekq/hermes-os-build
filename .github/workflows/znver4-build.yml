@@ -131,6 +131,7 @@ jobs:
 
             mkdir -pv bin_output/$pkg
             rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output/${pkg}" --define "debug_package %{nil}" --define "_annotated_build 0"
+          done
           mkdir -p ./out/x86_64
           cp bin_output/*/x86_64/*.rpm ./out/x86_64/ || true
       - name: Upload systemd Artifacts
