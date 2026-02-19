@@ -1,4 +1,4 @@
-name: Znver4 Parallel Optimization
+name: znver4 target
 on:
   schedule:
     - cron: '0 0 * * *'
@@ -154,7 +154,7 @@ jobs:
 
   build-systemd:
     needs: scanner
-    if: contains(needs.scanner.outputs.packages, 'glibc')
+    if: contains(needs.scanner.outputs.packages, 'systemd')
     runs-on: ubuntu-latest
     container: fedora:43
     timeout-minutes: 360
