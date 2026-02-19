@@ -98,63 +98,11 @@ jobs:
         with:
           name: build-glibc
           path: out/x86_64/*.rpm
-  # 3. BINUTILS & ELFUTILS SPECIALIST
   build-utils:
     needs: scanner
     if: |
       contains(needs.scanner.outputs.packages, 'binutils') || 
       contains(needs.scanner.outputs.packages, 'elfutils')
-    runs-on: ubuntu-latest
-    container: 
-      image: fedora:43
-      options: --privileged # Mock requires privileged mode for chroot
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      - name: Install Build Tools
-        run: |
-          dnf install -y mock rpm-build rpmspectool dnf-plugins-core
-          # Add the current user to the mock group
-          usermod -a -G mock $(whoami)
-      - name: Build Utils via Mock
-        run: |
-          TARGETS=""
-          [[ "${{ needs.scanner.outputs.packages }}" == *"binutils"* ]] && TARGETS="$TARGETS binutils"
-          [[ "${{ needs.scanner.outputs.packages }}" == *"elfutils"* ]] && TARGETS="$TARGETS elfutils"
-
-          # Create a custom mock config to inject Zen4 flags globally
-          mkdir -p custom_mock
-          cat /etc/mock/fedora-43-x86_64.cfg > custom_mock/znver4.cfg
-          cat << 'EOF' >> custom_mock/znver4.cfg
-          config_opts['macros']['%_annotated_build'] = '0'
-          config_opts['macros']['%_hardened_build'] = '0'
-          config_opts['macros']['%optflags'] = '-O3 -march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -g'
-          config_opts['macros']['%_nocheck'] = '1'
-          config_opts['macros']['%_distro_extra_cflags'] = '-march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -O3'
-          config_opts['macros']['%_distro_extra_cxxflags'] = '-march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin -O3'
-          EOF
-
-          for pkg in $TARGETS; do
-            dnf download --source $pkg
-            
-            # Use mock to build the SRPM into a binary RPM
-            # --nocheck is passed to bypass tests
-            mock -r $(pwd)/custom_mock/znver4.cfg \
-                 --resultdir=$(pwd)/specialist_staging \
-                 --rebuild $pkg-*.src.rpm \
-                 --nocheck
-
-            rm -f $pkg-*.src.rpm
-          done
-      - name: Upload Specialist Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-specialists
-          path: specialist_staging/*.rpm
-
-  build-systemd:
-    needs: scanner
-    if: contains(needs.scanner.outputs.packages, 'systemd')
     runs-on: ubuntu-latest
     container: fedora:43
     timeout-minutes: 360
@@ -165,24 +113,26 @@ jobs:
         run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
       - name: Build systemd
         run: |
-          dnf download --source systemd
-          dnf builddep -y systemd-*.src.rpm
-          
-          dnf -y in bpftool docbook-style-xsl kernel-devel xen-devel
-          rpm -ivh systemd-*.src.rpm
-          
-          SPEC=$(find ~/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
+          TARGETS=""
+          [[ "${{ needs.scanner.outputs.packages }}" == *"binutils"* ]] && TARGETS="$TARGETS binutils"
+          [[ "${{ needs.scanner.outputs.packages }}" == *"elfutils"* ]] && TARGETS="$TARGETS elfutils"
 
-          echo 'patching SPEC file'
-          curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/systemd-patches.diff > ~/znver4.diff
-          patch "$SPEC" < ~/znver4.diff 
+          curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/elfutils-patches.diff > ~/elfutils.diff
+          curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/binutils-patches.diff > ~/binutils.diff
 
-          echo 'starting rpmbuild'
-          mkdir -p bin_output
-          rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
-          
+          for pkg in $TARGETS; do
+            dnf download --source $pkg
+            dnf builddep -y $pkg-*.src.rpm
+
+            rpm -ivh $pkg-*.src.rpm
+            SPEC=$(find ~/rpmbuild/SPECS -name "${pkg}.spec" | head -n 1)
+
+            patch "$SPEC" < ./$pkg.diff
+
+            mkdir -pv bin_output/$pkg
+            rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output/${pkg}" --define "debug_package %{nil}" --define "_annotated_build 0"
           mkdir -p ./out/x86_64
-          cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
+          cp bin_output/*/x86_64/*.rpm ./out/x86_64/ || true
       - name: Upload systemd Artifacts
         uses: actions/upload-artifact@v4
         with:
