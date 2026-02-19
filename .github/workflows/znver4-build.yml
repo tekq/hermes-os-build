@@ -118,7 +118,7 @@ jobs:
           [[ "${{ needs.scanner.outputs.packages }}" == *"elfutils"* ]] && TARGETS="$TARGETS elfutils"
 
           curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/elfutils-patches.diff > ~/elfutils.diff
-          curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/binutils-patches.diff > ~/binutils.diff
+          # curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/binutils-patches.diff > ~/binutils.diff
 
           for pkg in $TARGETS; do
             dnf download --source $pkg
@@ -127,7 +127,7 @@ jobs:
             rpm -ivh $pkg-*.src.rpm
             SPEC=$(find ~/rpmbuild/SPECS -name "${pkg}.spec" | head -n 1)
 
-            patch "$SPEC" < ./$pkg.diff
+            patch "$SPEC" < ~/$pkg.diff
 
             mkdir -pv bin_output/$pkg
             rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output/${pkg}" --define "debug_package %{nil}" --define "_annotated_build 0"
