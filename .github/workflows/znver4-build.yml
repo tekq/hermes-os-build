@@ -186,29 +186,3 @@ jobs:
         with:
           name: build-systemd
           path: out/x86_64/*.rpm
-  deploy:
-    needs: [build, build-utils, build-systemd, build-glibc]
-    if: always() && (needs.build.result == 'success' || needs.build-glibc.result == 'success' || needs.build-utils.result == 'success' || needs.build-systemd.result == 'success')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Repo
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Download All Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: incoming_rpms/
-          merge-multiple: true
-      - name: Generate Repo and Push
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          sudo apt-get update && sudo apt-get install -y createrepo-c
-          mkdir -p x86_64
-          mv -f incoming_rpms/*.rpm x86_64/ 2>/dev/null || true
-          touch .nojekyll
-          createrepo_c x86_64/
-          git add .nojekyll x86_64/
-          git diff-index --quiet HEAD || (git commit -m "update" && git push)
