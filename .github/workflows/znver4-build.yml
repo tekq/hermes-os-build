@@ -169,13 +169,13 @@ jobs:
           dnf builddep -y systemd-*.src.rpm
           
           dnf -y in bpftool docbook-style-xsl kernel-devel xen-devel
-          rpm -ivh systemd-*.src.rpm --define "_topdir /workspace/rpmbuild"
+          rpm -ivh systemd-*.src.rpm
           
-          SPEC=$(find /workspace/rpmbuild/SPECS -name "systemd.spec" | head -n 1)
+          SPEC=$(find ./rpmbuild/SPECS -name "systemd.spec" | head -n 1)
 
           echo 'patching SPEC file'
-          curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/systemd-patches.diff > /workspace/znver4.diff
-          patch "$SPEC" < /workspace/znver4.diff 
+          curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/systemd-patches.diff > znver4.diff
+          patch "$SPEC" < znver4.diff 
 
           echo 'starting rpmbuild'
           mkdir -p bin_output
