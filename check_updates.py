@@ -13,7 +13,7 @@ PACKAGES = [
     # "binutils",
     "elfutils"
 ]
-MY_REPO_URL = "https://tekq.github.io/fhp-build/x86_64/"
+MY_REPO_URL = "https://tekq.github.io/hermes-os-build/x86_64/"
 FEDORA_RELEASE = "43"
 
 def get_version(repo_id, package, url=None):
@@ -44,7 +44,7 @@ def main():
     
     for pkg in PACKAGES:
         fedora_v = get_version("fedora", pkg)
-        my_v = get_version("fhp-build", pkg, MY_REPO_URL)
+        my_v = get_version("hermes-os-build", pkg, MY_REPO_URL)
         
         status = "OK"
         if fedora_v > my_v:

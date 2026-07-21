@@ -115,8 +115,8 @@ jobs:
           [[ "${{ needs.scanner.outputs.packages }}" == *"binutils"* ]] && TARGETS="$TARGETS binutils"
           [[ "${{ needs.scanner.outputs.packages }}" == *"elfutils"* ]] && TARGETS="$TARGETS elfutils"
 
-          curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/elfutils-patches.diff > ~/elfutils.diff
-          # curl -L https://raw.githubusercontent.com/tekq/fhp-build/main/binutils-patches.diff > ~/binutils.diff
+          curl -L https://raw.githubusercontent.com/tekq/hermes-os-build/main/elfutils-patches.diff > ~/elfutils.diff
+          # curl -L https://raw.githubusercontent.com/tekq/hermes-os-build/main/binutils-patches.diff > ~/binutils.diff
 
           for pkg in $TARGETS; do
             dnf download --source $pkg
