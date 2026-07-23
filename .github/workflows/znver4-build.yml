@@ -1,4 +1,4 @@
-name: "Build glibc (znver4)"
+name: "Build glibc (znver4 · QEMU/KVM)"
 
 on:
   workflow_dispatch:
@@ -7,44 +7,200 @@ on:
         description: "Fedora release version"
         default: "44"
         type: string
+      image_compose:
+        description: "Cloud image compose ID (e.g. 1.7)"
+        default: "1.7"
+        type: string
+      vm_ram:
+        description: "VM RAM allocation"
+        default: "6G"
+        type: string
+      cpu_model:
+        description: "QEMU CPU model (EPYC-Genoa for znver4, or 'host' for passthrough)"
+        default: "EPYC-Genoa"
+        type: string
 
 permissions:
   contents: write
 
 env:
-  QEMU_CPU: EPYC-Genoa
+  SSH_OPTS: >-
+    -o StrictHostKeyChecking=no
+    -o UserKnownHostsFile=/dev/null
+    -o LogLevel=ERROR
+    -o ConnectTimeout=10
 
 jobs:
   build-glibc:
     runs-on: ubuntu-latest
-    container: fedora:${{ inputs.fedora_release || '44' }}
     timeout-minutes: 360
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+          if [[ ! -e /dev/kvm ]]; then
+            exit 1
+          fi
+
+      - name: Check host CPU capabilities
+        run: |
+          lscpu | grep -E "Model name|CPU family|Vendor" || true
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            qemu-system-x86 qemu-utils cloud-image-utils openssh-client
+
+      - name: Cache Fedora cloud image
+        id: cache-image
+        uses: actions/cache@v4
+        with:
+          path: fedora-base.qcow2
+          key: fedora-cloud-${{ inputs.fedora_release || '44' }}-${{ inputs.image_compose || '1.7' }}
+
+      - name: Download Fedora cloud image
+        if: steps.cache-image.outputs.cache-hit != 'true'
+        run: |
+          RELEASE="${{ inputs.fedora_release || '44' }}"
+          COMPOSE="${{ inputs.image_compose || '1.7' }}"
+          IMAGE="Fedora-Cloud-Base-Generic-${RELEASE}-${COMPOSE}.x86_64.qcow2"
+          URL="https://download.fedoraproject.org/pub/fedora/linux/releases/${RELEASE}/Cloud/x86_64/images/${IMAGE}"
+
+          curl -L --fail --retry 3 --silent -o fedora-base.qcow2 "$URL"
+
+      - name: Prepare VM disk
+        run: |
+          cp fedora-base.qcow2 fedora.qcow2
+          qemu-img resize fedora.qcow2 40G
+
+      - name: Prepare cloud-init
+        run: |
+          ssh-keygen -t ed25519 -f vm_key -N "" -q
+          chmod 600 vm_key
+
+          cat > meta-data <<EOF
+          instance-id: glibc-znver4-builder
+          local-hostname: glibc-builder
+          EOF
+
+          cat > user-data <<EOF
+          #cloud-config
+          users:
+            - name: builder
+              sudo: ALL=(ALL) NOPASSWD:ALL
+              shell: /bin/bash
+              ssh_authorized_keys:
+                - $(cat vm_key.pub)
+
+          growpart:
+            mode: auto
+            devices: ["/"]
+
+          resize_rootfs: true
+
+          runcmd:
+            - touch /var/lib/cloud/instance/boot-finished-signal
+          EOF
+
+          cloud-localds seed.iso user-data meta-data
+
+      - name: Boot QEMU VM
+        run: |
+          CPU_MODEL="${{ inputs.cpu_model || 'EPYC-Genoa' }}"
+          VM_RAM="${{ inputs.vm_ram || '6G' }}"
+
+          qemu-system-x86_64 \
+            -accel tcg \
+            -cpu "$CPU_MODEL" \
+            -m "$VM_RAM" \
+            -smp "$(nproc)" \
+            -drive file=fedora.qcow2,if=virtio,format=qcow2,cache=unsafe \
+            -cdrom seed.iso \
+            -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+            -device virtio-net-pci,netdev=net0 \
+            -display none \
+            -serial file:serial.log \
+            -daemonize \
+            -pidfile qemu.pid
+
+      - name: Wait for VM to become ready
+        run: |
+          for i in $(seq 1 60); do
+            if ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
+               'true' 2>/dev/null; then
+              exit 0
+            fi
+            sleep 10
+          done
+          exit 1
+
+      - name: Copy scripts into VM
+        run: |
+          scp ${{ env.SSH_OPTS }} -i vm_key -P 2222 \
+            scripts/patch-glibc-spec.sh \
+            scripts/vm-build-glibc.sh \
+            builder@localhost:~/
+
+          ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
+            'chmod +x ~/patch-glibc-spec.sh ~/vm-build-glibc.sh'
+
       - name: Build glibc with znver4 (tests enabled)
         run: |
-          chmod +x scripts/patch-glibc-spec.sh scripts/build-glibc.sh
-          bash scripts/build-glibc.sh scripts/patch-glibc-spec.sh
+          ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=120 \
+            builder@localhost \
+            'sudo bash ~/vm-build-glibc.sh ~/patch-glibc-spec.sh'
+
+      - name: Extract built RPMs
+        run: |
+          mkdir -p output
+
+          scp ${{ env.SSH_OPTS }} -i vm_key -P 2222 -r \
+            'builder@localhost:/output/x86_64/*.rpm' output/ 2>/dev/null || \
+          scp ${{ env.SSH_OPTS }} -i vm_key -P 2222 -r \
+            'builder@localhost:/output/*.rpm' output/ 2>/dev/null || true
+
+      - name: Shutdown VM
+        if: always()
+        run: |
+          ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 \
+            builder@localhost 'sudo poweroff' 2>/dev/null || true
+          sleep 5
+          kill "$(cat qemu.pid 2>/dev/null)" 2>/dev/null || true
+
+      - name: Upload serial log (debug)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vm-serial-log
+          path: serial.log
+          retention-days: 7
 
       - name: Upload glibc RPMs
         uses: actions/upload-artifact@v4
         with:
           name: glibc-znver4-rpms
-          path: output/**/*.rpm
+          path: output/*.rpm
           if-no-files-found: ignore
 
       - name: Deploy RPMs to repository
         run: |
-          dnf install -y createrepo_c git
-
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+          sudo apt-get update -qq && sudo apt-get install -y -qq createrepo-c
+
           mkdir -p x86_64
-          cp -f output/**/*.rpm x86_64/ 2>/dev/null || true
           cp -f output/*.rpm x86_64/ 2>/dev/null || true
           touch .nojekyll
 

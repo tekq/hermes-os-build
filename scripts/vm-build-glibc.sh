@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
+<<<<<<< HEAD:scripts/build-glibc.sh
 WORKSPACE="$(pwd)"
 PATCH_SCRIPT="$(realpath "${1:-scripts/patch-glibc-spec.sh}")"
 OUTPUT_DIR="$WORKSPACE/output"
+=======
+PATCH_SCRIPT="${1:-$HOME/patch-glibc-spec.sh}"
+OUTPUT_DIR="/output"
+>>>>>>> parent of 343bbaf (Change emulation method):scripts/vm-build-glibc.sh
 
 dnf install -y \
     rpm-build rpmdevtools dnf-plugins-core \
-    gcc gcc-c++ make git python3 \
-    qemu-user-static \
+    gcc gcc-c++ make \
+    git python3 \
     --setopt=install_weak_deps=False
 
 rpmdev-setuptree 2>/dev/null || mkdir -p ~/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
@@ -35,3 +40,5 @@ rpmbuild -bb "$SPEC" \
     --define "_rpmdir $OUTPUT_DIR" \
     --define "debug_package %{nil}" \
     --define "_annotated_build 0"
+
+chmod -R 755 "$OUTPUT_DIR"
