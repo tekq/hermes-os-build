@@ -11,6 +11,8 @@ if grep -qE -- '-march=x86-64(-v[0-9])?' "$SPEC"; then
     sed -i -E 's/-march=x86-64(-v[0-9])?/-march=znver4/g' "$SPEC"
 fi
 
+sed -i 's/make install/make install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
+
 sed -i '/^%build$/a\
 export CFLAGS="${CFLAGS:+$CFLAGS }-march=znver4 -mtune=znver4"\
 export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-march=znver4 -mtune=znver4"\
