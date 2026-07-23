@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-PATCH_SCRIPT="${1:-scripts/patch-glibc-spec.sh}"
-OUTPUT_DIR="output"
+WORKSPACE="$(pwd)"
+PATCH_SCRIPT="$(realpath "${1:-scripts/patch-glibc-spec.sh}")"
+OUTPUT_DIR="$WORKSPACE/output"
 
 dnf install -y \
     rpm-build rpmdevtools dnf-plugins-core \
@@ -31,6 +32,6 @@ dnf builddep -y "$SPEC"
 mkdir -p "$OUTPUT_DIR"
 
 rpmbuild -bb "$SPEC" \
-    --define "_rpmdir $(pwd)/$OUTPUT_DIR" \
+    --define "_rpmdir $OUTPUT_DIR" \
     --define "debug_package %{nil}" \
     --define "_annotated_build 0"
