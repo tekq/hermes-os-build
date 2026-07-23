@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-<<<<<<< HEAD:scripts/build-glibc.sh
-WORKSPACE="$(pwd)"
-PATCH_SCRIPT="$(realpath "${1:-scripts/patch-glibc-spec.sh}")"
-OUTPUT_DIR="$WORKSPACE/output"
-=======
 PATCH_SCRIPT="${1:-$HOME/patch-glibc-spec.sh}"
 OUTPUT_DIR="/output"
->>>>>>> parent of 343bbaf (Change emulation method):scripts/vm-build-glibc.sh
 
 dnf install -y \
     rpm-build rpmdevtools dnf-plugins-core \
