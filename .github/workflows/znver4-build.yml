@@ -118,7 +118,7 @@ jobs:
           VM_RAM="${{ inputs.vm_ram || '6G' }}"
 
           qemu-system-x86_64 \
-            -enable-kvm \
+            -accel tcg \
             -cpu "$CPU_MODEL" \
             -m "$VM_RAM" \
             -smp "$(nproc)" \
