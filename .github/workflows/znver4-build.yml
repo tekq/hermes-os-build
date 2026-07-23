@@ -1,143 +1,213 @@
-name: znver4 target
+name: "Build glibc (znver4 · QEMU/KVM)"
+
 on:
   workflow_dispatch:
+    inputs:
+      fedora_release:
+        description: "Fedora release version"
+        default: "44"
+        type: string
+      image_compose:
+        description: "Cloud image compose ID (e.g. 1.7)"
+        default: "1.7"
+        type: string
+      vm_ram:
+        description: "VM RAM allocation"
+        default: "6G"
+        type: string
+      cpu_model:
+        description: "QEMU CPU model (EPYC-Genoa for znver4, or 'host' for passthrough)"
+        default: "EPYC-Genoa"
+        type: string
 
 permissions:
   contents: write
 
+env:
+  SSH_OPTS: >-
+    -o StrictHostKeyChecking=no
+    -o UserKnownHostsFile=/dev/null
+    -o LogLevel=ERROR
+    -o ConnectTimeout=10
+
 jobs:
-  # 1. SCANNER (Remains same)
-  scanner:
-    runs-on: ubuntu-latest
-    container: fedora:43
-    outputs:
-      packages: ${{ steps.check.outputs.packages }}
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      - name: Install Python
-        run: dnf install -y python3
-      - name: Run Hit List Check
-        id: check
-        run: |
-          UPDATES=$(python3 check_updates.py | grep "Triggering build for:" | sed 's/Triggering build for: //')
-          echo "packages=$UPDATES" >> $GITHUB_OUTPUT
-
-  # 2. GENERAL BUILDER (Simpler packages)
-  build:
-    needs: scanner
-    if: needs.scanner.outputs.packages != '' && needs.scanner.outputs.packages != '[]'
-    runs-on: ubuntu-latest
-    container: fedora:43
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      - name: Install System Tools
-        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git python3
-      - name: Build Simple
-        run: |
-          PKGS=$(echo "${{ needs.scanner.outputs.packages }}" | tr -d "[]'," | sed -E 's/(glibc|binutils|elfutils|systemd)//g') 
-          if [ -z "$PKGS" ]; then
-            echo "No general packages to build."
-            exit 0
-          fi
-          for pkg in $PKGS; do
-            echo "--- Processing $pkg ---"
-            dnf download --source $pkg
-            dnf builddep -y $pkg-*.src.rpm
-            mkdir -p bin_output
-            rpm -ivh $pkg-*.src.rpm
-            sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin' ~/rpmbuild/SPECS/*.spec
-            rpmbuild -bb ~/rpmbuild/SPECS/*.spec \
-              --nocheck \
-              --define "_rpmdir $(pwd)/bin_output" \
-              --define "debug_package %{nil}" \
-              --define "_annotated_build 0"
-            mkdir -p ./x86_64/
-            cp bin_output/x86_64/*.rpm ./x86_64/
-            rm -rf bin_output/* ~/rpmbuild/SPECS/* $pkg-*.src.rpm
-          done
-      - name: Upload General Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-general
-          path: x86_64/*.rpm
   build-glibc:
-    needs: scanner
-    if: contains(needs.scanner.outputs.packages, 'glibc')
     runs-on: ubuntu-latest
-    container: fedora:43
     timeout-minutes: 360
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
-      - name: Install System Tools
-        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
-      - name: Build Glibc
+
+      - name: Enable KVM access
         run: |
-          dnf download --source glibc
-          dnf builddep -y glibc-*.src.rpm
-          rpm -ivh glibc-*.src.rpm
-          SPEC=$(find $HOME/rpmbuild/SPECS -name "glibc.spec" | head -n 1)
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
 
-          sed -i '1i %global optflags %{optflags} -march=znver4 -mtune=znver4 -mprefer-vector-width=512 -O3 -flto=thin' "$SPEC"
-          sed -i '/%configure/ s/$/ --enable-x86-64-v4/' "$SPEC"
-          sed -i 's/make install/make install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
-          sed -i '1i %global with_doc 0' "$SPEC"
-          sed -i '1i %global run_glibc_tests 0' "$SPEC"
+          if [[ ! -e /dev/kvm ]]; then
+            exit 1
+          fi
 
-          mkdir -p bin_output
-          rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output" --define "debug_package %{nil}" --define "_annotated_build 0"
-          
-          mkdir -p ./out/x86_64
-          cp bin_output/x86_64/*.rpm ./out/x86_64/ || true
-      - name: Upload Glibc Artifacts
-        uses: actions/upload-artifact@v4
+      - name: Check host CPU capabilities
+        run: |
+          lscpu | grep -E "Model name|CPU family|Vendor" || true
+
+      - name: Install QEMU and tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            qemu-system-x86 qemu-utils cloud-image-utils openssh-client
+
+      - name: Cache Fedora cloud image
+        id: cache-image
+        uses: actions/cache@v4
         with:
-          name: build-glibc
-          path: out/x86_64/*.rpm
-  build-utils:
-    needs: scanner
-    if: |
-      contains(needs.scanner.outputs.packages, 'binutils') || 
-      contains(needs.scanner.outputs.packages, 'elfutils')
-    runs-on: ubuntu-latest
-    container: fedora:43
-    timeout-minutes: 360
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      - name: Install System Tools
-        run: dnf install -y rpm-build rpmspectool dnf-plugins-core gcc make git
-      - name: Build systemd
+          path: fedora-base.qcow2
+          key: fedora-cloud-${{ inputs.fedora_release || '44' }}-${{ inputs.image_compose || '1.7' }}
+
+      - name: Download Fedora cloud image
+        if: steps.cache-image.outputs.cache-hit != 'true'
         run: |
-          TARGETS=""
-          [[ "${{ needs.scanner.outputs.packages }}" == *"binutils"* ]] && TARGETS="$TARGETS binutils"
-          [[ "${{ needs.scanner.outputs.packages }}" == *"elfutils"* ]] && TARGETS="$TARGETS elfutils"
+          RELEASE="${{ inputs.fedora_release || '44' }}"
+          COMPOSE="${{ inputs.image_compose || '1.7' }}"
+          IMAGE="Fedora-Cloud-Base-Generic-${RELEASE}-${COMPOSE}.x86_64.qcow2"
+          URL="https://download.fedoraproject.org/pub/fedora/linux/releases/${RELEASE}/Cloud/x86_64/images/${IMAGE}"
 
-          curl -L https://raw.githubusercontent.com/tekq/hermes-os-build/main/elfutils-patches.diff > ~/elfutils.diff
-          # curl -L https://raw.githubusercontent.com/tekq/hermes-os-build/main/binutils-patches.diff > ~/binutils.diff
+          curl -L --fail --retry 3 --silent -o fedora-base.qcow2 "$URL"
 
-          for pkg in $TARGETS; do
-            dnf download --source $pkg
-            dnf builddep -y $pkg-*.src.rpm
+      - name: Prepare VM disk
+        run: |
+          cp fedora-base.qcow2 fedora.qcow2
+          qemu-img resize fedora.qcow2 40G
 
-            if [[ $pkg -eq "elfutils" ]]; then
-              dnf -y in sysprof-capture-devel
+      - name: Prepare cloud-init
+        run: |
+          ssh-keygen -t ed25519 -f vm_key -N "" -q
+          chmod 600 vm_key
+
+          cat > meta-data <<EOF
+          instance-id: glibc-znver4-builder
+          local-hostname: glibc-builder
+          EOF
+
+          cat > user-data <<EOF
+          #cloud-config
+          users:
+            - name: builder
+              sudo: ALL=(ALL) NOPASSWD:ALL
+              shell: /bin/bash
+              ssh_authorized_keys:
+                - $(cat vm_key.pub)
+
+          growpart:
+            mode: auto
+            devices: ["/"]
+
+          resize_rootfs: true
+
+          runcmd:
+            - touch /var/lib/cloud/instance/boot-finished-signal
+          EOF
+
+          cloud-localds seed.iso user-data meta-data
+
+      - name: Boot QEMU VM
+        run: |
+          CPU_MODEL="${{ inputs.cpu_model || 'EPYC-Genoa' }}"
+          VM_RAM="${{ inputs.vm_ram || '6G' }}"
+
+          qemu-system-x86_64 \
+            -enable-kvm \
+            -cpu "$CPU_MODEL" \
+            -m "$VM_RAM" \
+            -smp "$(nproc)" \
+            -drive file=fedora.qcow2,if=virtio,format=qcow2,cache=unsafe \
+            -cdrom seed.iso \
+            -netdev user,id=net0,hostfwd=tcp::2222-:22 \
+            -device virtio-net-pci,netdev=net0 \
+            -display none \
+            -serial file:serial.log \
+            -daemonize \
+            -pidfile qemu.pid
+
+      - name: Wait for VM to become ready
+        run: |
+          for i in $(seq 1 60); do
+            if ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
+               'true' 2>/dev/null; then
+              exit 0
             fi
-            
-            rpm -ivh $pkg-*.src.rpm
-            SPEC=$(find ~/rpmbuild/SPECS -name "${pkg}.spec" | head -n 1)
-
-            patch "$SPEC" < ~/$pkg.diff
-
-            mkdir -pv bin_output/$pkg
-            rpmbuild -bb "$SPEC" --nocheck --define "_rpmdir $(pwd)/bin_output/${pkg}" --define "debug_package %{nil}" --define "_annotated_build 0"
+            sleep 10
           done
-          mkdir -p ./out/x86_64
-          cp bin_output/*/x86_64/*.rpm ./out/x86_64/ || true
-      - name: Upload systemd Artifacts
+          exit 1
+
+      - name: Copy scripts into VM
+        run: |
+          scp ${{ env.SSH_OPTS }} -i vm_key -P 2222 \
+            scripts/patch-glibc-spec.sh \
+            scripts/vm-build-glibc.sh \
+            builder@localhost:~/
+
+          ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
+            'chmod +x ~/patch-glibc-spec.sh ~/vm-build-glibc.sh'
+
+      - name: Build glibc with znver4 (tests enabled)
+        run: |
+          ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 \
+            -o ServerAliveInterval=60 \
+            -o ServerAliveCountMax=120 \
+            builder@localhost \
+            'sudo bash ~/vm-build-glibc.sh ~/patch-glibc-spec.sh'
+
+      - name: Extract built RPMs
+        run: |
+          mkdir -p output
+
+          scp ${{ env.SSH_OPTS }} -i vm_key -P 2222 -r \
+            'builder@localhost:/output/x86_64/*.rpm' output/ 2>/dev/null || \
+          scp ${{ env.SSH_OPTS }} -i vm_key -P 2222 -r \
+            'builder@localhost:/output/*.rpm' output/ 2>/dev/null || true
+
+      - name: Shutdown VM
+        if: always()
+        run: |
+          ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 \
+            builder@localhost 'sudo poweroff' 2>/dev/null || true
+          sleep 5
+          kill "$(cat qemu.pid 2>/dev/null)" 2>/dev/null || true
+
+      - name: Upload serial log (debug)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-systemd
-          path: out/x86_64/*.rpm
+          name: vm-serial-log
+          path: serial.log
+          retention-days: 7
+
+      - name: Upload glibc RPMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: glibc-znver4-rpms
+          path: output/*.rpm
+          if-no-files-found: ignore
+
+      - name: Deploy RPMs to repository
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          sudo apt-get update -qq && sudo apt-get install -y -qq createrepo-c
+
+          mkdir -p x86_64
+          cp -f output/*.rpm x86_64/ 2>/dev/null || true
+          touch .nojekyll
+
+          createrepo_c x86_64/
+
+          git add .nojekyll x86_64/
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "build: update glibc znver4 rpms and repository metadata"
+            git push
+          fi
