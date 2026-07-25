@@ -11,7 +11,7 @@ if grep -qE -- '-march=x86-64(-v[0-9])?' "$SPEC"; then
     sed -i -E 's/-march=x86-64(-v[0-9])?/-march=znver4/g' "$SPEC"
 fi
 
-sed -i 's/make install/make install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
+sed -i 's/%make_build install_root=%{glibc_sysroot} install/%make_build install_root=%{glibc_sysroot} install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
 
 
 sed -i '/^%build$/a\
