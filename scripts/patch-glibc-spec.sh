@@ -13,6 +13,7 @@ fi
 
 sed -i 's/make install/make install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
 
+
 sed -i '/^%build$/a\
 export CFLAGS="${CFLAGS:+$CFLAGS }-march=znver4 -mtune=znver4"\
 export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-march=znver4 -mtune=znver4"\
