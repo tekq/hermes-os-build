@@ -120,7 +120,7 @@ jobs:
           qemu-system-x86_64 \
             -machine q35,accel=tcg \
             -cpu max,avx=on,avx2=on,bmi1=on,bmi2=on,fma=on,f16c=on,sha-ni=on,adx=on,vaes=on,vpclmulqdq=on \
-            -cpu "$CPU_MODEL" \
+            # -cpu "$CPU_MODEL" \
             -m "$VM_RAM" \
             -smp "8" \
             -drive file=fedora.qcow2,if=virtio,format=qcow2,cache=unsafe \
