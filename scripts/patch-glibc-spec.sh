@@ -3,6 +3,9 @@ set -euo pipefail
 
 SPEC="${1:?Usage: $0 <path-to-glibc.spec>}"
 
+SDEPATH=$(find ~/sde/* -name sde | sed 's|lin/sde|lin|')
+SDE64="${SDEPATH}/sde64"
+
 if [[ ! -f "$SPEC" ]]; then
     exit 1
 fi
@@ -18,6 +21,9 @@ sed -i '/^%build$/a\
 export CFLAGS="${CFLAGS:+$CFLAGS }-march=znver4 -mtune=znver4"\
 export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-march=znver4 -mtune=znver4"\
 export RPM_OPT_FLAGS="${RPM_OPT_FLAGS:+$RPM_OPT_FLAGS }-march=znver4 -mtune=znver4"' "$SPEC"
+
+sed -i '/^%check&/a\
+export test-wrapper="${SDE64} --"' "$SPEC"
 
 for var_pattern in 'BuildFlags=' 'build_CFLAGS=' 'glibc_flags_cflags='; do
     if grep -q "$var_pattern" "$SPEC"; then
