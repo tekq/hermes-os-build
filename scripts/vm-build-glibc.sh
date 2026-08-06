@@ -40,7 +40,7 @@ dnf builddep -y "$SPEC"
 
 mkdir -p "$OUTPUT_DIR"
 
-export PATH=$PATH:$(find ~/* -name sde | sed 's|lin/sde|lin|')
+export PATH=$PATH:$(find ~/sde/* -name sde | sed 's|lin/sde|lin|')
 
 dnf -y in strace
 
