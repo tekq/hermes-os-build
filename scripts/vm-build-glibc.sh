@@ -42,7 +42,7 @@ mkdir -p "$OUTPUT_DIR"
 
 export PATH=$PATH:$(find /tmp/sde/* -name sde | sed 's|lin/sde|lin|')
 
-sde -- rpmbuild -bb "$SPEC" \
+strace sde -- rpmbuild -bb "$SPEC" \
     --define "_rpmdir $OUTPUT_DIR" \
     --define "debug_package %{nil}" \
     --define "_annotated_build 0"
