@@ -42,6 +42,8 @@ mkdir -p "$OUTPUT_DIR"
 
 export PATH=$PATH:$(find /tmp/sde/* -name sde | sed 's|lin/sde|lin|')
 
+dnf -y in strace
+
 strace sde -- rpmbuild -bb "$SPEC" \
     --define "_rpmdir $OUTPUT_DIR" \
     --define "debug_package %{nil}" \
