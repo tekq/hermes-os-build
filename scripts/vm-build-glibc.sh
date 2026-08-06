@@ -4,14 +4,13 @@ set -euxo pipefail
 PATCH_SCRIPT="${1:-$HOME/patch-glibc-spec.sh}"
 OUTPUT_DIR="/output"
 
-# Install Intel's SDE 
-curl -fL https://downloadmirror.intel.com/924984/sde-external-10.13.1-2026-07-28-lin.tar.xz -o /tmp/intel-sde.tar.xz
+# Install Intel's SDE
+export SDE_VERSION=10.13.1-2026-07-28
+curl -fL https://downloadmirror.intel.com/924984/sde-external-${SDE_VERSION}-lin.tar.xz -o /tmp/intel-sde.tar.xz
 
 mkdir /tmp/sde/
 
 tar xfv /tmp/intel-sde.tar.xz -C /tmp/sde/
-
-alias sde=$(find /tmp/sde/* -name sde)
 
 dnf install -y \
     rpm-build rpmdevtools dnf-plugins-core \
@@ -39,7 +38,9 @@ dnf builddep -y "$SPEC"
 
 mkdir -p "$OUTPUT_DIR"
 
-sde -- rpmbuild -bb "$SPEC" \
+export SDE=$(find /tmp/sde/* -name sde)
+
+$SDE -- rpmbuild -bb "$SPEC" \
     --define "_rpmdir $OUTPUT_DIR" \
     --define "debug_package %{nil}" \
     --define "_annotated_build 0"
