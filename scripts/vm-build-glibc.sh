@@ -40,7 +40,7 @@ dnf builddep -y "$SPEC"
 
 mkdir -p "$OUTPUT_DIR"
 
-PATH=$PATH:/tmp/sde/
+export PATH=$PATH:$(find /tmp/sde/* -name sde | sed 's|lin/sde|lin|')
 
 sde -- rpmbuild -bb "$SPEC" \
     --define "_rpmdir $OUTPUT_DIR" \
