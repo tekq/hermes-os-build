@@ -12,6 +12,8 @@ mkdir /tmp/sde/
 
 tar xfv /tmp/intel-sde.tar.xz -C /tmp/sde/
 
+setenforce 0
+
 dnf install -y \
     rpm-build rpmdevtools dnf-plugins-core \
     gcc gcc-c++ make \
@@ -38,9 +40,9 @@ dnf builddep -y "$SPEC"
 
 mkdir -p "$OUTPUT_DIR"
 
-export SDE=$(find /tmp/sde/* -name sde)
+PATH=$PATH:/tmp/sde/
 
-$SDE -- rpmbuild -bb "$SPEC" \
+sde -- rpmbuild -bb "$SPEC" \
     --define "_rpmdir $OUTPUT_DIR" \
     --define "debug_package %{nil}" \
     --define "_annotated_build 0"
