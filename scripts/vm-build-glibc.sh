@@ -8,9 +8,9 @@ OUTPUT_DIR="/output"
 export SDE_VERSION=10.13.1-2026-07-28
 curl -fL https://downloadmirror.intel.com/924984/sde-external-${SDE_VERSION}-lin.tar.xz -o /tmp/intel-sde.tar.xz
 
-mkdir /tmp/sde/
+mkdir ~/sde
 
-tar xfv /tmp/intel-sde.tar.xz -C /tmp/sde/
+tar xfv /tmp/intel-sde.tar.xz -C ~/sde
 
 setenforce 0
 
@@ -40,11 +40,11 @@ dnf builddep -y "$SPEC"
 
 mkdir -p "$OUTPUT_DIR"
 
-export PATH=$PATH:$(find /tmp/sde/* -name sde | sed 's|lin/sde|lin|')
+export PATH=$PATH:$(find ~/* -name sde | sed 's|lin/sde|lin|')
 
 dnf -y in strace
 
-strace -ff sde -- rpmbuild -bb "$SPEC" \
+sde -- rpmbuild -bb "$SPEC" \
     --define "_rpmdir $OUTPUT_DIR" \
     --define "debug_package %{nil}" \
     --define "_annotated_build 0"
