@@ -28,11 +28,7 @@ export CFLAGS="${CFLAGS:+$CFLAGS }-march=znver4 -mtune=znver4"\
 export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-march=znver4 -mtune=znver4"\
 export RPM_OPT_FLAGS="${RPM_OPT_FLAGS:+$RPM_OPT_FLAGS }-march=znver4 -mtune=znver4"' "$SPEC"
 
-sed -i '/^%install$/a\
-export test-wrapper="$SDE64 --"' "$SPEC"
-
-sed -i '/^%check$/a\
-export test-wrapper="$SDE64 --"' "$SPEC"
+sed -i "1i %global __make /usr/bin/make test-wrapper=\"$SDE64 --\"" "$SPEC"
 
 sed -i -E "s@(\\\$RPM_BUILD_ROOT|%\{buildroot\})%\{_bindir\}/localedef@$SDE64 &@g" "$SPEC"
 
