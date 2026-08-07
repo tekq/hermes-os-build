@@ -161,7 +161,7 @@ jobs:
           SDE_VERSION="${{ inputs.sde_version || '10.13.1-2026-07-28' }}"
 
           ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
-            'curl -fL https://downloadmirror.intel.com/924984/sde-external-$SDE_VERSION-lin.tar.xz -o /tmp/intel-sde.tar.xz'
+            'curl -vfL https://downloadmirror.intel.com/924984/sde-external-${SDE_VERSION}-lin.tar.xz -o /tmp/intel-sde.tar.xz'
 
           ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
             'mkdir ~/sde && tar xfv /tmp/intel-sde.tar.xz -C ~/sde'
