@@ -22,6 +22,9 @@ export CFLAGS="${CFLAGS:+$CFLAGS }-march=znver4 -mtune=znver4"\
 export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-march=znver4 -mtune=znver4"\
 export RPM_OPT_FLAGS="${RPM_OPT_FLAGS:+$RPM_OPT_FLAGS }-march=znver4 -mtune=znver4"' "$SPEC"
 
+sed -i '/^%install$/a\
+export test-wrapper="$SDE64 --"' "$SPEC"
+
 sed -i '/^%check$/a\
 export test-wrapper="$SDE64 --"' "$SPEC"
 
