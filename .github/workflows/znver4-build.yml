@@ -169,7 +169,7 @@ jobs:
           scp ${{ env.SSH_OPTS }} -i vm_key -P 2222 ~/intel-sde.tar.xz builder@localhost:/tmp/intel-sde.tar.xz
 
           ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
-            'sudo mkdir ~/sde && sudo tar xfv /tmp/intel-sde.tar.xz -C ~/sde'
+            'sudo mkdir /root/sde && sudo tar xfv /tmp/intel-sde.tar.xz -C /root/sde'
 
       - name: Build glibc with znver4 (tests enabled)
         run: |
