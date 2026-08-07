@@ -160,7 +160,11 @@ jobs:
         run: |
           SDE_VERSION="${{ inputs.sde_version || '10.13.1-2026-07-28' }}"
 
-          curl -vfL https://downloadmirror.intel.com/924984/sde-external-$SDE_VERSION-lin.tar.xz -o ~/intel-sde.tar.xz
+          echo "Using SDE ${SDE_VERSION}"
+
+          URL="https://downloadmirror.intel.com/924984/sde-external-${SDE_VERSION}-lin.tar.xz"
+
+          curl -vfL $URL -o ~/intel-sde.tar.xz
 
           scp ${{ env.SSH_OPTS }} -i vm_key -P 2222 ~/intel-sde.tar.xz:/tmp/intel-sde.tar.xz
 
