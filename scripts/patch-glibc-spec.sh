@@ -24,7 +24,7 @@ sed -i '/^%build$/a \
 export CFLAGS="${CFLAGS:+$CFLAGS }-march=znver4 -mtune=znver4"\
 export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-march=znver4 -mtune=znver4"\
 export RPM_OPT_FLAGS="${RPM_OPT_FLAGS:+$RPM_OPT_FLAGS }-march=znver4 -mtune=znver4"\
-sed -i '\''s|\\$(common-objpfx)elf/ld.so|\\$(test-wrapper) \\$(common-objpfx)elf/ld.so|g'\'' localedata/Makefile' "$SPEC"
+find .. . -maxdepth 3 -name Makefile -path "*/localedata/Makefile" -exec sed -i '\''s|\\$(common-objpfx)elf/ld.so|\\$(test-wrapper) \\$(common-objpfx)elf/ld.so|g'\'' {} +' "$SPEC"
 
 sed -i "1i %global __make /usr/bin/make test-wrapper=\"$SDE64 -spr --\"" "$SPEC"
 
