@@ -25,9 +25,9 @@ export RPM_OPT_FLAGS="${RPM_OPT_FLAGS:+$RPM_OPT_FLAGS }-march=znver4 -mtune=znve
 sed -i '/^%check$/a\
 export test-wrapper="$SDE64 --"' "$SPEC"
 
-sed -i -E "s|(\\\$RPM_BUILD_ROOT|%\{buildroot\})%\{_bindir\}/localedef|$SDE64 &|g" "$SPEC"
+sed -i -E "s@(\\\$RPM_BUILD_ROOT|%\{buildroot\})%\{_bindir\}/localedef@$SDE64 &@g" "$SPEC"
 
-sed -i -E "s|(\\\$RPM_BUILD_ROOT|%\{buildroot\})%\{_sbindir\}/iconvconfig|$SDE64 &|g" "$SPEC"
+sed -i -E "s@(\\\$RPM_BUILD_ROOT|%\{buildroot\})%\{_sbindir\}/iconvconfig@$SDE64 &@g" "$SPEC"
 
 for var_pattern in 'BuildFlags=' 'build_CFLAGS=' 'glibc_flags_cflags='; do
     if grep -q "$var_pattern" "$SPEC"; then
