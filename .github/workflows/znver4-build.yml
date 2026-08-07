@@ -171,9 +171,6 @@ jobs:
           ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
             'mkdir ~/sde && tar xfv /tmp/intel-sde.tar.xz -C ~/sde'
 
-          ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
-            'setenforce 0'
-
       - name: Build glibc with znver4 (tests enabled)
         run: |
           ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 \
