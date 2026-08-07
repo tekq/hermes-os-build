@@ -3,8 +3,14 @@ set -euo pipefail
 
 SPEC="${1:?Usage: $0 <path-to-glibc.spec>}"
 
+# SDE
+export PATH=$PATH:$(find ~/sde/* -name sde | sed 's|lin/sde|lin|')
 SDEPATH=$(find ~/sde/* -name sde | sed 's|lin/sde|lin|')
 SDE64="${SDEPATH}/sde64"
+
+echo $PATH
+echo $SDEPATH
+echo $SDE64
 
 if [[ ! -f "$SPEC" ]]; then
     exit 1

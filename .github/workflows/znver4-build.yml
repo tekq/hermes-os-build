@@ -19,6 +19,10 @@ on:
         description: "QEMU CPU model (EPYC-Genoa for znver4, or 'host' for passthrough)"
         default: "EPYC-Genoa"
         type: string
+      sde_version:
+        description: Version of Intel SDE to use
+        default: "10.13.1-2026-07-28"
+        type: string
 
 permissions:
   contents: write
@@ -151,6 +155,19 @@ jobs:
 
           ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
             'chmod +x ~/patch-glibc-spec.sh ~/vm-build-glibc.sh'
+
+      - name: Install Intel SDE in VM
+        run: |
+          SDE_VERSION="${{ inputs.sde_version || '10.13.1-2026-07-28' }}"
+
+          ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
+            'curl -fL https://downloadmirror.intel.com/924984/sde-external-$SDE_VERSION-lin.tar.xz -o /tmp/intel-sde.tar.xz'
+
+          ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
+            'mkdir ~/sde && tar xfv /tmp/intel-sde.tar.xz -C ~/sde'
+
+          ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
+            'setenforce 0'
 
       - name: Build glibc with znver4 (tests enabled)
         run: |

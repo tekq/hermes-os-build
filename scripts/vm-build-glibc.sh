@@ -4,16 +4,6 @@ set -euxo pipefail
 PATCH_SCRIPT="${1:-$HOME/patch-glibc-spec.sh}"
 OUTPUT_DIR="/output"
 
-# Install Intel's SDE
-export SDE_VERSION=10.13.1-2026-07-28
-curl -fL https://downloadmirror.intel.com/924984/sde-external-${SDE_VERSION}-lin.tar.xz -o /tmp/intel-sde.tar.xz
-
-mkdir ~/sde
-
-tar xfv /tmp/intel-sde.tar.xz -C ~/sde
-
-setenforce 0
-
 dnf install -y \
     rpm-build rpmdevtools dnf-plugins-core \
     gcc gcc-c++ make \
