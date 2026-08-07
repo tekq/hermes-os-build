@@ -166,7 +166,7 @@ jobs:
 
           curl -vfL $URL -o ~/intel-sde.tar.xz
 
-          scp ${{ env.SSH_OPTS }} -i vm_key -P 2222 ~/intel-sde.tar.xz:/tmp/intel-sde.tar.xz
+          scp ${{ env.SSH_OPTS }} -i vm_key -P 2222 ~/intel-sde.tar.xz builder@localhost:/tmp/intel-sde.tar.xz
 
           ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
             'mkdir ~/sde && tar xfv /tmp/intel-sde.tar.xz -C ~/sde'
