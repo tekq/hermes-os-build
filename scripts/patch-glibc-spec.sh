@@ -20,15 +20,16 @@ if grep -qE -- '-march=x86-64(-v[0-9])?' "$SPEC"; then
     sed -i -E 's/-march=x86-64(-v[0-9])?/-march=znver4/g' "$SPEC"
 fi
 
-sed -i 's/%make_build install_root=%{glibc_sysroot} install/%make_build install_root=%{glibc_sysroot} install LOCALEDEF=\/usr\/bin\/localedef/g' "$SPEC"
+sed -i "/^%build$/a\
+export CFLAGS=\"\${CFLAGS:+\$CFLAGS }-march=znver4 -mtune=znver4\"\
+export CXXFLAGS=\"\${CXXFLAGS:+\$CXXFLAGS }-march=znver4 -mtune=znver4\"\
+export RPM_OPT_FLAGS=\"\${RPM_OPT_FLAGS:+\$RPM_OPT_FLAGS }-march=znver4 -mtune=znver4\"" "$SPEC"
 
+sed -i "1i %global __make /usr/bin/make test-wrapper=\"$SDE64 -spr --\"" "$SPEC"
 
-sed -i '/^%build$/a\
-export CFLAGS="${CFLAGS:+$CFLAGS }-march=znver4 -mtune=znver4"\
-export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-march=znver4 -mtune=znver4"\
-export RPM_OPT_FLAGS="${RPM_OPT_FLAGS:+$RPM_OPT_FLAGS }-march=znver4 -mtune=znver4"' "$SPEC"
+sed -i -E "s@(\\\$RPM_BUILD_ROOT|%\{buildroot\})%\{_bindir\}/localedef@$SDE64 -spr -- &@g" "$SPEC"
 
-sed -i "1i %global __make /usr/bin/make test-wrapper=\"$SDE64 -spr --\" LOCALEDEF='$SDE64 -spr -- \$(common-objpfx)elf/ld.so --library-path \$(rpath-link) \$(common-objpfx)locale/localedef'" "$SPEC"
+sed -i -E "s@(\\\$RPM_BUILD_ROOT|%\{buildroot\})%\{_sbindir\}/iconvconfig@$SDE64 -spr -- &@g" "$SPEC"
 
 for var_pattern in 'BuildFlags=' 'build_CFLAGS=' 'glibc_flags_cflags='; do
     if grep -q "$var_pattern" "$SPEC"; then
