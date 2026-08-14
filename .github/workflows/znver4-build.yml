@@ -169,7 +169,7 @@ jobs:
           scp ${{ env.SSH_OPTS }} -i vm_key -P 2222 ~/intel-sde.tar.xz builder@localhost:/tmp/intel-sde.tar.xz
 
           ssh ${{ env.SSH_OPTS }} -i vm_key -p 2222 builder@localhost \
-            'sudo mkdir /root/sde && sudo tar xfv /tmp/intel-sde.tar.xz -C /root/sde'
+            'sudo mkdir ~/sde && sudo tar xfv /tmp/intel-sde.tar.xz -C ~/sde'
 
       - name: Build glibc with znver4 (tests enabled)
         run: |
@@ -177,7 +177,7 @@ jobs:
             -o ServerAliveInterval=60 \
             -o ServerAliveCountMax=120 \
             builder@localhost \
-            'export PATH=$PATH:$(sudo find /root/sde/* -name sde | sed "s|lin/sde|lin|") && sudo sde64 -- bash ~/vm-build-glibc.sh ~/patch-glibc-spec.sh'
+            'export PATH=$PATH:$(find ~/sde/* -name sde | sed "s|lin/sde|lin|") && sudo sde64 -- bash ~/vm-build-glibc.sh ~/patch-glibc-spec.sh'
 
       - name: Extract built RPMs
         run: |
