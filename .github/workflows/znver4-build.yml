@@ -177,7 +177,7 @@ jobs:
             -o ServerAliveInterval=60 \
             -o ServerAliveCountMax=120 \
             builder@localhost \
-            'export PATH=$PATH:$(find ~/sde/* -name sde | sed "s|lin/sde|lin|") && sudo sde64 -- bash ~/vm-build-glibc.sh ~/patch-glibc-spec.sh'
+            'sudo $(find /home/builder/sde -name sde64) -- bash ~/vm-build-glibc.sh ~/patch-glibc-spec.sh'
 
       - name: Extract built RPMs
         run: |
