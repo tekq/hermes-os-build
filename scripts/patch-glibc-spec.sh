@@ -3,15 +3,6 @@ set -euo pipefail
 
 SPEC="${1:?Usage: $0 <path-to-glibc.spec>}"
 
-# SDE
-export PATH=$PATH:$(find ~/sde/* -name sde | sed 's|lin/sde|lin|')
-SDEPATH=$(find ~/sde/* -name sde | sed 's|lin/sde|lin|')
-SDE64="${SDEPATH}/sde64"
-
-echo $PATH
-echo $SDEPATH
-echo $SDE64
-
 if [[ ! -f "$SPEC" ]]; then
     exit 1
 fi
@@ -24,12 +15,8 @@ sed -i '/^%build$/a \
 export CFLAGS="${CFLAGS:+$CFLAGS }-march=znver4 -mtune=znver4"\
 export CXXFLAGS="${CXXFLAGS:+$CXXFLAGS }-march=znver4 -mtune=znver4"\
 export RPM_OPT_FLAGS="${RPM_OPT_FLAGS:+$RPM_OPT_FLAGS }-march=znver4 -mtune=znver4"\
-find .. . -maxdepth 3 -name Makefile -path "*/localedata/Makefile" -exec sed -i -E '\''s|\\$\\(common-objpfx\\)elf/ld\\.so[[:space:]]+--library-path[[:space:]]+\\$\\(rpath-link\\)|env LD_LIBRARY_PATH=\\$(rpath-link) \\$(test-wrapper)|g'\'' {} +' "$SPEC"
+find .. . -maxdepth 3 -name Makefile -path "*/localedata/Makefile" -exec sed -i -E '\''s|\\$\\(common-objpfx\\)elf/ld\\.so[[:space:]]+--library-path[[:space:]]+\\$\\(rpath-link\\)|env LD_LIBRARY_PATH=\\$(rpath-link)|g'\'' {} +' "$SPEC"
 
-sed -i "1i %global __make /usr/bin/make test-wrapper=\"$SDE64 -spr --\"" "$SPEC"
-
-sed -i -E "s@(\\\$RPM_BUILD_ROOT|%\{buildroot\})%\{_bindir\}/localedef@$SDE64 -spr -- &@g" "$SPEC"
-sed -i -E "s@(\\\$RPM_BUILD_ROOT|%\{buildroot\})%\{_sbindir\}/iconvconfig@$SDE64 -spr -- &@g" "$SPEC"
 
 for var_pattern in 'BuildFlags=' 'build_CFLAGS=' 'glibc_flags_cflags='; do
     if grep -q "$var_pattern" "$SPEC"; then

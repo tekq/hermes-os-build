@@ -4,7 +4,7 @@ set -euxo pipefail
 PATCH_SCRIPT="${1:-$HOME/patch-glibc-spec.sh}"
 OUTPUT_DIR="/output"
 
-setenforce 0
+setenforce 0 || true
 
 dnf install -y \
     rpm-build rpmdevtools dnf-plugins-core \
@@ -31,8 +31,6 @@ bash "$PATCH_SCRIPT" "$SPEC"
 dnf builddep -y "$SPEC"
 
 mkdir -p "$OUTPUT_DIR"
-
-export PATH=$PATH:$(find ~/sde/* -name sde | sed 's|lin/sde|lin|')
 
 rpmbuild -bb "$SPEC" \
     --define "_rpmdir $OUTPUT_DIR" \
