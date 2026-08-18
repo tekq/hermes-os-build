@@ -41,8 +41,7 @@ jobs:
       - name: Build glibc with znver4 wrapped in SDE
         run: |
           export BUILDSCRIPT=$(find -name vm-build-glibc.sh | head -n1)
-          export PATCHSCRIPT=$(find -name patch-glibc-spec.sh | head -n1)
-          /opt/sde/sde64 -spr -- bash $BUILDSCRIPT $PATCHSCRIPT
+          /opt/sde/sde64 -spr -- bash $BUILDSCRIPT
 
       - name: Upload glibc RPMs
         uses: actions/upload-artifact@v4

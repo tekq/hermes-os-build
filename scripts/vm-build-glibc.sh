@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-PATCH_SCRIPT="${1:-$HOME/patch-glibc-spec.sh}"
+PATCH_SCRIPT=$(find -name patch-glibc-spec.sh)
 OUTPUT_DIR="/output"
 
 setenforce 0 || true
@@ -25,7 +25,6 @@ if [[ -z "$SPEC" ]]; then
     exit 1
 fi
 
-chmod +x "$PATCH_SCRIPT"
 bash "$PATCH_SCRIPT" "$SPEC"
 
 dnf builddep -y "$SPEC"
