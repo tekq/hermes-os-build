@@ -27,6 +27,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Prep scripts
+        run: |
+          export BUILDSCRIPT=$(find -name vm-build-glibc.sh | head -n1)
+          export PATCHSCRIPT=$(find -name patch-glibc-spec.sh | head -n1)
+
+          cp $BUILDSCRIPT ~/build.sh && chmod a+x ~/build.sh
+          cp $PATCHSCRIPT ~/patch.sh && chmod a+x ~/patch.sh
+
       - name: Install dependencies and Intel SDE
         run: |
           dnf install -y tar xz curl git createrepo_c
@@ -40,8 +48,7 @@ jobs:
 
       - name: Build glibc with znver4 wrapped in SDE
         run: |
-          export BUILDSCRIPT=$(find -name vm-build-glibc.sh | head -n1)
-          /opt/sde/sde64 -spr -- bash $BUILDSCRIPT
+          /opt/sde/sde64 -spr -- bash ~/build.sh ~/patch.sh
 
       - name: Upload glibc RPMs
         uses: actions/upload-artifact@v4

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
-PATCH_SCRIPT=$(find -name patch-glibc-spec.sh)
+PATCH_SCRIPT="${1:-$HOME/patch.sh}"
 OUTPUT_DIR="/output"
 
 setenforce 0 || true
