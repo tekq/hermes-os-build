@@ -40,10 +40,8 @@ jobs:
 
       - name: Build glibc with znver4 wrapped in SDE
         run: |
-          pwd && find .
-          exit
-          chmod +x ~/scripts/patch-glibc-spec.sh ~/scripts/vm-build-glibc.sh
-          /opt/sde/sde64 -spr -- bash scripts/vm-build-glibc.sh scripts/patch-glibc-spec.sh
+          chmod +x ./scripts/patch-glibc-spec.sh ./scripts/vm-build-glibc.sh
+          /opt/sde/sde64 -spr -- bash ./scripts/vm-build-glibc.sh ./scripts/patch-glibc-spec.sh
 
       - name: Upload glibc RPMs
         uses: actions/upload-artifact@v4
