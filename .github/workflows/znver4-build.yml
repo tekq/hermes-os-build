@@ -40,7 +40,6 @@ jobs:
 
       - name: Build glibc with znver4 wrapped in SDE
         run: |
-          chmod +x ./scripts/patch-glibc-spec.sh ./scripts/vm-build-glibc.sh
           /opt/sde/sde64 -spr -- bash ./scripts/vm-build-glibc.sh ./scripts/patch-glibc-spec.sh
 
       - name: Upload glibc RPMs
