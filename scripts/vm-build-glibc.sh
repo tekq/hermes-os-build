@@ -31,9 +31,12 @@ dnf builddep -y "$SPEC"
 
 mkdir -p "$OUTPUT_DIR"
 
+export RPM_BUILD_NCPUS=1
+
 rpmbuild -bb "$SPEC" \
     --define "_rpmdir $OUTPUT_DIR" \
     --define "debug_package %{nil}" \
-    --define "_annotated_build 0"
+    --define "_annotated_build 0" \
+    --define "_smp_mflags -j1"
 
 chmod -R 755 "$OUTPUT_DIR"
