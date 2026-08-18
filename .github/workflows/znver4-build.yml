@@ -40,9 +40,7 @@ jobs:
 
       - name: Build glibc with znver4 wrapped in SDE
         run: |
-          pwd && find .
-          exit
-          chmod +x ~/scripts/patch-glibc-spec.sh ~/scripts/vm-build-glibc.sh
+          chmod +x scripts/patch-glibc-spec.sh scripts/vm-build-glibc.sh
           /opt/sde/sde64 -spr -- bash scripts/vm-build-glibc.sh scripts/patch-glibc-spec.sh
 
       - name: Upload glibc RPMs
@@ -69,4 +67,3 @@ jobs:
             git commit -m "build: update glibc znver4 rpms and repository metadata"
             git push
           fi
-
